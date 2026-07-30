@@ -120,6 +120,11 @@ are derived from values read off the device rather than hardcoded guesses.
 Three Gradle modules. The split exists so that the gesture algorithm can be shared
 between two very different hosts and tested without a device.
 
+Application ID: **`dev.erinlkolp.glasslauncher`**. Chosen deliberately to differ from
+the `com.example.glasslauncher` APK that was found pre-installed on the device and
+removed on 2026-07-30 — identical package names would collide in `/data/app` and make
+`dumpsys` output ambiguous if that APK is ever reinstalled for comparison.
+
 ```
 gesture-core/   java-library   pure JVM, zero Android imports
     ├── TouchSample            (x, y, timeMs, pointerCount) value type
@@ -199,7 +204,7 @@ The daemon is therefore invoked as:
 
 ```sh
 CLASSPATH=/data/local/tmp/gestured.jar \
-    app_process /system/bin com.example.glasslauncher.daemon.Main
+    app_process /system/bin dev.erinlkolp.glasslauncher.daemon.Main
 ```
 
 `app_process` is a symlink to `app_process32`, consistent with the 32-bit SoC.
@@ -329,5 +334,5 @@ The debug overlay exists to make this observable rather than guessed at.
 ./gradlew :app:installDebug
 ./gradlew :daemon:dexJar && adb push daemon/build/gestured.jar /data/local/tmp/
 adb shell CLASSPATH=/data/local/tmp/gestured.jar \
-    app_process /system/bin com.example.glasslauncher.daemon.Main
+    app_process /system/bin dev.erinlkolp.glasslauncher.daemon.Main
 ```
