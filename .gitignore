@@ -13,3 +13,6 @@ local.properties
 # Probe artifacts
 *.apk
 probe-output.txt
+
+# Claude Code local state
+.claude/settings.local.json*
