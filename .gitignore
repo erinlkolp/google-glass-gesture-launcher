@@ -1,0 +1,15 @@
+# Local Android SDK / platform-tools (downloaded, not vendored)
+tools/
+
+# Gradle
+.gradle/
+build/
+local.properties
+
+# IDE
+.idea/
+*.iml
+
+# Probe artifacts
+*.apk
+probe-output.txt
