@@ -2714,12 +2714,17 @@ Append to `GlassGestureDetectorTest.java`:
     }
 
     /**
-     * A short downward drag on the 187-unit-tall axis must not read as a tap.
-     * 30 screen px of vertical travel is only ~15.6 native units.
+     * A deliberate but insufficient downward drag must be NOTHING — not a tap,
+     * and not a swipe. 60 screen px of vertical travel is ~31.2 native units:
+     * past TAP_SLOP (25) so it is not stationary, but short of
+     * VERTICAL_THRESHOLD (60) so it is not a swipe either.
+     *
+     * <p>This is the gap that previously launched apps: an aborted downward
+     * swipe fell under the old TAP_SLOP of 40 and read as a tap.
      */
     @Test
-    public void shortDownwardDragIsNotATap() {
-        List<TouchSample> trace = SwipeTrace.straight(300f, 100f, 302f, 130f, 200L, 1);
+    public void insufficientDownwardDragIsNeitherTapNorSwipe() {
+        List<TouchSample> trace = SwipeTrace.straight(300f, 100f, 302f, 160f, 200L, 1);
         assertEquals(Gesture.NONE, SwipeTrace.play(detector, trace));
     }
 
