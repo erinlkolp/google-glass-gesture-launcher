@@ -80,4 +80,40 @@ public class GlassGestureDetectorTest {
         assertEquals(Gesture.NONE,
                 detector.accept(new TouchSample(TouchPhase.CANCEL, 300f, 180f, 150L, 1)));
     }
+
+    @Test
+    public void twoFingerHorizontalTravelIsATwoFingerForwardSwipe() {
+        List<TouchSample> trace = SwipeTrace.straight(100f, 180f, 300f, 195f, 200L, 2);
+        assertEquals(Gesture.TWO_FINGER_SWIPE_FORWARD, SwipeTrace.play(detector, trace));
+    }
+
+    @Test
+    public void twoFingerBackwardTravelIsATwoFingerBackwardSwipe() {
+        List<TouchSample> trace = SwipeTrace.straight(400f, 180f, 200f, 190f, 200L, 2);
+        assertEquals(Gesture.TWO_FINGER_SWIPE_BACKWARD, SwipeTrace.play(detector, trace));
+    }
+
+    @Test
+    public void twoFingerDownwardTravelIsTheGlobalHomeGesture() {
+        List<TouchSample> trace = SwipeTrace.straight(300f, 40f, 310f, 300f, 200L, 2);
+        assertEquals(Gesture.TWO_FINGER_SWIPE_DOWN, SwipeTrace.play(detector, trace));
+    }
+
+    /**
+     * A second finger landing mid-gesture must still count. The peak pointer
+     * count across the whole contact decides, not the count at lift-off.
+     */
+    @Test
+    public void secondFingerArrivingMidSwipeStillCountsAsTwoFinger() {
+        detector.accept(new TouchSample(TouchPhase.DOWN, 300f, 40f, 0L, 1));
+        detector.accept(new TouchSample(TouchPhase.MOVE, 305f, 150f, 100L, 2));
+        assertEquals(Gesture.TWO_FINGER_SWIPE_DOWN,
+                detector.accept(new TouchSample(TouchPhase.UP, 310f, 300f, 200L, 1)));
+    }
+
+    @Test
+    public void twoFingerStationaryContactIsNotAGesture() {
+        List<TouchSample> trace = SwipeTrace.straight(300f, 180f, 303f, 181f, 120L, 2);
+        assertEquals(Gesture.NONE, SwipeTrace.play(detector, trace));
+    }
 }

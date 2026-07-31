@@ -88,8 +88,13 @@ public final class GlassGestureDetector {
 
         long durationMs = up.timeMs - startTimeMs;
         float distance = (float) Math.sqrt(dx * dx + dy * dy);
+        boolean multiTouch = maxPointerCount >= 2;
 
         if (distance < TAP_SLOP) {
+            if (multiTouch) {
+                // Two-finger taps carry no meaning in this design.
+                return Gesture.NONE;
+            }
             return durationMs >= LONG_PRESS_MS ? Gesture.LONG_PRESS : Gesture.TAP;
         }
 
@@ -101,6 +106,11 @@ public final class GlassGestureDetector {
             if (Math.abs(dx) < HORIZONTAL_THRESHOLD) {
                 return Gesture.NONE;
             }
+            if (multiTouch) {
+                return dx > 0.0f
+                        ? Gesture.TWO_FINGER_SWIPE_FORWARD
+                        : Gesture.TWO_FINGER_SWIPE_BACKWARD;
+            }
             return dx > 0.0f ? Gesture.SWIPE_FORWARD : Gesture.SWIPE_BACKWARD;
         }
 
@@ -108,6 +118,9 @@ public final class GlassGestureDetector {
             return Gesture.NONE;
         }
         // Upward swipes are unassigned; only downward is meaningful.
-        return dy > 0.0f ? Gesture.SWIPE_DOWN : Gesture.NONE;
+        if (dy <= 0.0f) {
+            return Gesture.NONE;
+        }
+        return multiTouch ? Gesture.TWO_FINGER_SWIPE_DOWN : Gesture.SWIPE_DOWN;
     }
 }
