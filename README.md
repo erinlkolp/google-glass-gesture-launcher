@@ -91,16 +91,42 @@ gestured: watching /dev/input/event3
 ```
 
 and stays running, printing `gestured: two-finger down -> home` each time it recognizes
-the gesture. It **does not survive a reboot** — it must be started again by re-running
-`./run-daemon.sh` after every power cycle.
+the gesture. Run this way, it **does not survive a reboot** — it must be started again by
+re-running `./run-daemon.sh` after every power cycle. This is the quickest way to try the
+daemon out or iterate on it during development.
 
 `adb` is not on `PATH` in this repo; it lives at `./tools/platform-tools/adb` and
 `run-daemon.sh` invokes it by that relative path.
 
+### Boot persistence
+
+For the daemon to start automatically at every boot (no manual `./run-daemon.sh` needed),
+install it as a boot hook:
+
+```bash
+./scripts/install-boot-hook.sh
+```
+
+This copies `daemon/build/libs/gestured.jar` to `/system/bin/gestured.jar` and writes
+`/system/bin/install-recovery.sh`, a script named for and executed by the pre-existing
+(and otherwise unused) `flash_recovery` service in `/init.rc`. That service is `class
+main`/`oneshot`, so the script backgrounds itself immediately and polls
+`sys.boot_completed` before launching `app_process`, so init is never held up and the
+daemon isn't started before the framework is ready. It requires an `eng`/`userdebug`
+build where `adb shell` is already root, same as manual daemon operation.
+
+To remove the boot hook (the daemon can still be run manually with `./run-daemon.sh`
+afterward):
+
+```bash
+adb shell 'mount -o rw,remount /system && rm /system/bin/install-recovery.sh /system/bin/gestured.jar && mount -o ro,remount /system'
+```
+
 ## Known limitations
 
-- The daemon does not survive reboot; it must be restarted manually after every power
-  cycle. (Boot persistence is a planned follow-up, not implemented here.)
+- The daemon does not survive reboot unless installed via `./scripts/install-boot-hook.sh`
+  (see "Boot persistence" above); a daemon started with `./run-daemon.sh` alone must be
+  restarted manually after every power cycle.
 - The gesture is observed but not consumed: the daemon deliberately never issues
   `EVIOCGRAB` (an exclusive grab would block input system-wide), so the foreground app
   also sees the same swipe that triggered the go-home action.
