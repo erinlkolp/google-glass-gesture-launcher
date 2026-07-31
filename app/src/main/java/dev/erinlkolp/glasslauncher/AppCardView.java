@@ -37,8 +37,21 @@ public final class AppCardView extends View {
     }
 
     public void setEntries(List<AppEntry> entries) {
+        boolean sameList = entries.size() == this.entries.size();
+        if (sameList) {
+            for (int i = 0; i < entries.size(); i++) {
+                if (!entries.get(i).activityName.equals(this.entries.get(i).activityName)) {
+                    sameList = false;
+                    break;
+                }
+            }
+        }
         this.entries = entries;
-        this.selectedIndex = 0;
+        if (!sameList) {
+            this.selectedIndex = 0;
+        } else if (this.selectedIndex >= entries.size()) {
+            this.selectedIndex = Math.max(0, entries.size() - 1);
+        }
         invalidate();
     }
 

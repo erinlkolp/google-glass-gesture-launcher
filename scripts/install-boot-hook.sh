@@ -26,17 +26,18 @@ LOG=/data/local/tmp/gestured.log
     echo "\$(date): gestured.jar missing, not starting"
     exit 1
   fi
-  echo "\$(date): starting gestured"
+  echo "\$(date): starting gestured" >> \$LOG
   export CLASSPATH=/system/bin/gestured.jar
-  attempt=0
-  while [ \$attempt -lt 5 ]; do
-    app_process /system/bin dev.erinlkolp.glasslauncher.daemon.Main
+  while true; do
+    app_process /system/bin dev.erinlkolp.glasslauncher.daemon.Main </dev/null >> \$LOG 2>&1
     status=\$?
-    attempt=\$((attempt + 1))
-    echo "\$(date): gestured exited with status \$status (attempt \$attempt/5)"
+    echo "\$(date): gestured exited with status \$status" >> \$LOG
+    if [ \$status -eq 0 ]; then
+      echo "\$(date): clean exit, not restarting" >> \$LOG
+      break
+    fi
     sleep 30
   done
-  echo "\$(date): gestured failed 5 times, giving up"
 ) &
 EOF'
 

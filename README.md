@@ -66,7 +66,7 @@ In-app gestures, handled by `LauncherActivity`:
 | Two-finger swipe backward | Jump back 10 entries |
 | Tap | Launch selected app |
 | Long press | Toggle detail view (package + activity name) |
-| Swipe down | Close detail view if open, otherwise exit the launcher |
+| Swipe down | Close detail view if open, otherwise no-op |
 | Camera button | Recenter selection to the first app |
 
 Handled globally by the root daemon, independent of which app is foregrounded:
@@ -154,8 +154,9 @@ adb shell 'mount -o rw,remount /system && rm /system/bin/install-recovery.sh /sy
   share the exact same detector.
 - `app/` — the Android launcher UI: `LauncherActivity`, the app card view, and the
   installed-apps repository.
-- `daemon/` — the root process that reads `/dev/input/event3` directly and triggers the
-  global go-home gesture; dexed into a standalone jar runnable by `app_process`.
+- `daemon/` — the root process that resolves the touchpad's evdev node by name via
+  `EvdevDeviceLocator` (tolerating renumbering across boots) and triggers the global
+  go-home gesture; dexed into a standalone jar runnable by `app_process`.
 
 ## Further reading
 

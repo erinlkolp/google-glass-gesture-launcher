@@ -25,14 +25,34 @@ public final class Main {
 
     private static final String DEVICE_NAME = "sensor00fn11";
 
-    public static void main(String[] args) throws IOException {
-        String node = locateTouchpad();
+    public static void main(String[] args) throws InterruptedException {
+        String node;
+        try {
+            node = locateTouchpad();
+        } catch (IOException e) {
+            System.err.println("gestured: could not find input device " + DEVICE_NAME);
+            System.exit(1);
+            return;
+        }
         if (node == null) {
             System.err.println("gestured: could not find input device " + DEVICE_NAME);
             System.exit(1);
+            return;
         }
         System.out.println("gestured: watching " + node);
 
+        while (true) {
+            try {
+                watch(node);
+                System.err.println("gestured: input stream ended, reopening");
+            } catch (IOException e) {
+                System.err.println("gestured: read error, reopening: " + e.getMessage());
+            }
+            Thread.sleep(2000L);
+        }
+    }
+
+    private static void watch(String node) throws IOException {
         EvdevReader reader = new EvdevReader();
         GlassGestureDetector detector =
                 new GlassGestureDetector(TouchpadGeometry.GLASS, GestureOrientation.DEFAULT);

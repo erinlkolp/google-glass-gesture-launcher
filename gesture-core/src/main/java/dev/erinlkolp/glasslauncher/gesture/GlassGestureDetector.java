@@ -23,8 +23,15 @@ public final class GlassGestureDetector {
     private static final long TAP_MAX_MS = 250L;
     /** Native units of horizontal travel required to call a swipe horizontal. */
     private static final float HORIZONTAL_THRESHOLD = 150.0f;
-    /** Native units of vertical travel required to call a swipe vertical. */
-    private static final float VERTICAL_THRESHOLD = 60.0f;
+    /**
+     * Native units of vertical travel required to call a swipe vertical.
+     *
+     * <p>Deliberately well below the ~63-unit minimum observed in real captured
+     * downward swipes. The pad is only 187 units tall and fingers usually land
+     * mid-pad, so the usable downward range is often ~80 units — a threshold
+     * near that floor makes the gesture feel intermittent.
+     */
+    private static final float VERTICAL_THRESHOLD = 45.0f;
     /** Contact duration at or above which a stationary contact is a long press. */
     private static final long LONG_PRESS_MS = 500L;
 

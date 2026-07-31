@@ -7,7 +7,6 @@ import android.os.Bundle;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
-import android.view.WindowManager;
 import android.widget.Toast;
 import dev.erinlkolp.glasslauncher.gesture.Gesture;
 import dev.erinlkolp.glasslauncher.gesture.GestureOrientation;
@@ -27,7 +26,6 @@ public class LauncherActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         detector = new GlassGestureDetector(TouchpadGeometry.GLASS, GestureOrientation.DEFAULT);
         repository = new AppRepository(this);
@@ -116,10 +114,11 @@ public class LauncherActivity extends Activity {
                 cardView.setShowingDetail(!cardView.isShowingDetail());
                 break;
             case SWIPE_DOWN:
+                // Dismiss the detail view if it is open. At top level, do nothing:
+                // this activity is the home screen, so finish() would simply cause
+                // ActivityManager to relaunch it.
                 if (cardView.isShowingDetail()) {
                     cardView.setShowingDetail(false);
-                } else {
-                    finish();
                 }
                 break;
             case TWO_FINGER_SWIPE_DOWN:
