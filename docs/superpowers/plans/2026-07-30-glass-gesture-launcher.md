@@ -2526,6 +2526,82 @@ git commit -m "feat(daemon): add global two-finger-down home gesture"
 
 ---
 
+### Task 12: README
+
+**Files:**
+- Create: `README.md`
+
+**Interfaces:**
+- Consumes: the finished state of every prior task. Run this last, so the gesture
+  table and the deploy commands describe what actually shipped rather than what was
+  planned.
+- Produces: nothing other tasks depend on.
+
+- [ ] **Step 1: Confirm the facts you are about to document**
+
+Do not copy these from the plan — read them out of the code that now exists, because
+Task 6 may have changed the orientation default and Task 9 may have found protocol B.
+
+```bash
+grep -n "DEFAULT" gesture-core/src/main/java/dev/erinlkolp/glasslauncher/gesture/GestureOrientation.java
+grep -n "protocol" docs/superpowers/notes/2026-07-30-mt-protocol-finding.md
+./gradlew test 2>&1 | tail -5
+```
+
+- [ ] **Step 2: Write `README.md`**
+
+Cover exactly these sections, in this order:
+
+1. **What this is** — a touchpad-driven application launcher for Google Glass Explorer
+   Edition hardware running community AOSP 5.1.1, plus a root daemon supplying a global
+   go-home gesture. State plainly that it does NOT use the Glass GDK, and why: the
+   device runs stock AOSP with no Glass system layer, so the GDK has nothing to talk to.
+
+2. **Hardware it targets** — reproduce the verified-facts table from spec §1.1 and
+   §1.2: `glass-1` / OMAP4430 / Android 5.1.1 API 22 / eng build / 640×360 at density
+   240 / touchpad `sensor00fn11` reporting `SOURCE_TOUCHSCREEN` with native geometry
+   1366 × 187.
+
+3. **The anisotropy problem, in three sentences** — the pad is 1366 × 187 mapped onto
+   640 × 360, so received coordinates amplify vertical motion about 4.11×, and every
+   measurement is therefore done in native units. Link to spec §3 for the full
+   explanation rather than restating it.
+
+4. **Build** — prerequisites (JDK 21, the SDK bootstrap from Task 1), then
+   `./gradlew test` and `./gradlew :app:installDebug`.
+
+5. **Gesture reference** — a table of every gesture and its action, read out of
+   `LauncherActivity.handle()` and the daemon, not out of the spec.
+
+6. **Running the daemon** — `./run-daemon.sh`, what it prints on success, and the
+   explicit note that it must be restarted after every reboot.
+
+7. **Known limitations** — the daemon does not survive reboot; the gesture is observed
+   but not consumed, so the foreground app also sees the swipe; the launcher does not
+   claim `CATEGORY_HOME`, so `com.android.launcher2.Launcher` remains the system home
+   screen.
+
+8. **Layout** — one line per module saying what it holds and, for `gesture-core`, that
+   it is deliberately Android-free so it can be unit-tested and shared with the daemon.
+
+9. **Further reading** — relative links to the spec and this plan.
+
+Keep it accurate over comprehensive. Every command in it must be one you have actually
+run.
+
+- [ ] **Step 3: Verify every command in the README**
+
+Execute each command block you wrote. Any that fails must be corrected, not removed.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add README.md
+git commit -m "docs: add README"
+```
+
+---
+
 ## Deferred to Phase 3
 
 Explicitly out of scope for this plan, per spec §6:
