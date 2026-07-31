@@ -115,11 +115,18 @@ main`/`oneshot`, so the script backgrounds itself immediately and polls
 daemon isn't started before the framework is ready. It requires an `eng`/`userdebug`
 build where `adb shell` is already root, same as manual daemon operation.
 
+The boot-started daemon's stdout/stderr (the same `gestured: watching ...` and
+`gestured: two-finger down -> home` lines `./run-daemon.sh` prints) are appended to
+`/data/local/tmp/gestured.log` rather than shown anywhere, since there's no console
+attached at boot; check that file to confirm the daemon started, or to see why it
+didn't (e.g. a missing/corrupt `/system/bin/gestured.jar` is logged there instead of
+failing silently).
+
 To remove the boot hook (the daemon can still be run manually with `./run-daemon.sh`
 afterward):
 
 ```bash
-adb shell 'mount -o rw,remount /system && rm /system/bin/install-recovery.sh /system/bin/gestured.jar && mount -o ro,remount /system'
+adb shell 'mount -o rw,remount /system && rm /system/bin/install-recovery.sh /system/bin/gestured.jar && mount -o ro,remount /system && rm -f /data/local/tmp/gestured.log'
 ```
 
 ## Known limitations
