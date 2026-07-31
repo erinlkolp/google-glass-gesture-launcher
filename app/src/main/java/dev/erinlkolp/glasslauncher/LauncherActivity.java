@@ -1,9 +1,13 @@
 package dev.erinlkolp.glasslauncher;
 
 import android.app.Activity;
+import android.content.ComponentName;
+import android.content.Intent;
 import android.os.Bundle;
+import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.WindowManager;
+import android.widget.Toast;
 import dev.erinlkolp.glasslauncher.gesture.Gesture;
 import dev.erinlkolp.glasslauncher.gesture.GestureOrientation;
 import dev.erinlkolp.glasslauncher.gesture.GlassGestureDetector;
@@ -12,8 +16,12 @@ import dev.erinlkolp.glasslauncher.gesture.TouchpadGeometry;
 
 public class LauncherActivity extends Activity {
 
+    /** Entries skipped by a two-finger horizontal swipe. */
+    private static final int PAGE_JUMP = 10;
+
     private GlassGestureDetector detector;
-    private GestureDebugOverlay overlay;
+    private AppCardView cardView;
+    private AppRepository repository;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -21,8 +29,25 @@ public class LauncherActivity extends Activity {
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         detector = new GlassGestureDetector(TouchpadGeometry.GLASS, GestureOrientation.DEFAULT);
-        overlay = new GestureDebugOverlay(this);
-        setContentView(overlay);
+        repository = new AppRepository(this);
+        repository.start();
+        cardView = new AppCardView(this);
+        cardView.setEntries(repository.load());
+        setContentView(cardView);
+    }
+
+    @Override
+    protected void onDestroy() {
+        repository.stop();
+        super.onDestroy();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // Cheap: load() returns the cache unless a package actually changed,
+        // in which case the receiver has already invalidated it.
+        cardView.setEntries(repository.load());
     }
 
     @Override
@@ -31,8 +56,67 @@ public class LauncherActivity extends Activity {
         if (sample == null) {
             return super.onTouchEvent(event);
         }
-        Gesture gesture = detector.accept(sample);
-        overlay.record(sample, gesture);
+        handle(detector.accept(sample));
         return true;
+    }
+
+    @Override
+    public boolean onKeyDown(int keyCode, KeyEvent event) {
+        if (keyCode == KeyEvent.KEYCODE_CAMERA) {
+            cardView.recenter();
+            return true;
+        }
+        return super.onKeyDown(keyCode, event);
+    }
+
+    private void handle(Gesture gesture) {
+        switch (gesture) {
+            case SWIPE_FORWARD:
+                cardView.move(1);
+                break;
+            case SWIPE_BACKWARD:
+                cardView.move(-1);
+                break;
+            case TWO_FINGER_SWIPE_FORWARD:
+                cardView.move(PAGE_JUMP);
+                break;
+            case TWO_FINGER_SWIPE_BACKWARD:
+                cardView.move(-PAGE_JUMP);
+                break;
+            case TAP:
+                launchSelected();
+                break;
+            case LONG_PRESS:
+                cardView.setShowingDetail(!cardView.isShowingDetail());
+                break;
+            case SWIPE_DOWN:
+                if (cardView.isShowingDetail()) {
+                    cardView.setShowingDetail(false);
+                } else {
+                    finish();
+                }
+                break;
+            case TWO_FINGER_SWIPE_DOWN:
+                // Handled globally by the root daemon; see spec section 5.
+                break;
+            default:
+                break;
+        }
+    }
+
+    private void launchSelected() {
+        AppEntry entry = cardView.selected();
+        if (entry == null) {
+            return;
+        }
+        Intent intent = new Intent(Intent.ACTION_MAIN);
+        intent.addCategory(Intent.CATEGORY_LAUNCHER);
+        intent.setComponent(new ComponentName(entry.packageName, entry.activityName));
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
+        try {
+            startActivity(intent);
+        } catch (Exception e) {
+            Toast.makeText(this, "Could not launch " + entry.label, Toast.LENGTH_SHORT).show();
+        }
     }
 }
