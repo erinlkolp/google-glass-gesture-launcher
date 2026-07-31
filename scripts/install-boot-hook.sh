@@ -18,16 +18,25 @@ $ADB shell 'cat > /system/bin/install-recovery.sh <<EOF
 LOG=/data/local/tmp/gestured.log
 (
   trap "" HUP
+  exec </dev/null >>\$LOG 2>&1
   while [ "\$(getprop sys.boot_completed)" != "1" ]; do
     sleep 2
   done
   if [ ! -f /system/bin/gestured.jar ]; then
-    echo "\$(date): gestured.jar missing, not starting" >> \$LOG
+    echo "\$(date): gestured.jar missing, not starting"
     exit 1
   fi
-  echo "\$(date): starting gestured" >> \$LOG
+  echo "\$(date): starting gestured"
   export CLASSPATH=/system/bin/gestured.jar
-  exec app_process /system/bin dev.erinlkolp.glasslauncher.daemon.Main </dev/null >> \$LOG 2>&1
+  attempt=0
+  while [ \$attempt -lt 5 ]; do
+    app_process /system/bin dev.erinlkolp.glasslauncher.daemon.Main
+    status=\$?
+    attempt=\$((attempt + 1))
+    echo "\$(date): gestured exited with status \$status (attempt \$attempt/5)"
+    sleep 30
+  done
+  echo "\$(date): gestured failed 5 times, giving up"
 ) &
 EOF'
 
