@@ -11,8 +11,16 @@ package dev.erinlkolp.glasslauncher.gesture;
  */
 public final class GlassGestureDetector {
 
-    /** Native units of travel below which a contact is stationary. */
-    private static final float TAP_SLOP = 40.0f;
+    /**
+     * Native units of travel below which a contact is stationary.
+     *
+     * <p>Deliberately tight. The pad is 1366 units wide but only 187 tall, so a
+     * generous slop that is negligible horizontally consumes a large fraction of
+     * the vertical range and swallows genuine downward swipes.
+     */
+    private static final float TAP_SLOP = 25.0f;
+    /** Contacts longer than this are too slow to be a tap. */
+    private static final long TAP_MAX_MS = 250L;
     /** Native units of horizontal travel required to call a swipe horizontal. */
     private static final float HORIZONTAL_THRESHOLD = 150.0f;
     /** Native units of vertical travel required to call a swipe vertical. */
@@ -95,7 +103,15 @@ public final class GlassGestureDetector {
                 // Two-finger taps carry no meaning in this design.
                 return Gesture.NONE;
             }
-            return durationMs >= LONG_PRESS_MS ? Gesture.LONG_PRESS : Gesture.TAP;
+            if (durationMs >= LONG_PRESS_MS) {
+                return Gesture.LONG_PRESS;
+            }
+            if (durationMs <= TAP_MAX_MS) {
+                return Gesture.TAP;
+            }
+            // Between the two: too slow to be a tap, too quick to be a long
+            // press. Ambiguous input must be a no-op, never an app launch.
+            return Gesture.NONE;
         }
 
         // Both deltas are in the same physical units, so a bare magnitude

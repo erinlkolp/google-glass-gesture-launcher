@@ -116,4 +116,36 @@ public class GlassGestureDetectorTest {
         List<TouchSample> trace = SwipeTrace.straight(300f, 180f, 303f, 181f, 120L, 2);
         assertEquals(Gesture.NONE, SwipeTrace.play(detector, trace));
     }
+
+    /**
+     * A contact too slow to be a tap but too quick to be a long press must be
+     * NOTHING. Previously this returned TAP, which launched the selected app —
+     * the most destructive possible outcome for a misread gesture.
+     */
+    @Test
+    public void contactBetweenTapAndLongPressDurationsIsNotAGesture() {
+        List<TouchSample> trace = SwipeTrace.straight(300f, 180f, 304f, 181f, 350L, 1);
+        assertEquals(Gesture.NONE, SwipeTrace.play(detector, trace));
+    }
+
+    /**
+     * A deliberate but insufficient downward drag must be NOTHING — not a tap,
+     * and not a swipe. 60 screen px of vertical travel is ~31.2 native units:
+     * past TAP_SLOP (25) so it is not stationary, but short of
+     * VERTICAL_THRESHOLD (60) so it is not a swipe either.
+     *
+     * <p>This is the gap that previously launched apps: an aborted downward
+     * swipe fell under the old TAP_SLOP of 40 and read as a tap.
+     */
+    @Test
+    public void insufficientDownwardDragIsNeitherTapNorSwipe() {
+        List<TouchSample> trace = SwipeTrace.straight(300f, 100f, 302f, 160f, 200L, 1);
+        assertEquals(Gesture.NONE, SwipeTrace.play(detector, trace));
+    }
+
+    @Test
+    public void quickStationaryContactIsStillATap() {
+        List<TouchSample> trace = SwipeTrace.straight(300f, 180f, 302f, 181f, 90L, 1);
+        assertEquals(Gesture.TAP, SwipeTrace.play(detector, trace));
+    }
 }
