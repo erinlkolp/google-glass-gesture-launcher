@@ -1,4 +1,4 @@
-# Local Android SDK / platform-tools (downloaded, not vendored)
+# Local Android SDK (now lives at ~/Android/Sdk; kept for older checkouts)
 tools/
 
 # Gradle

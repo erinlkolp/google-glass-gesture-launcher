@@ -3,7 +3,7 @@
 # Requires an eng/userdebug build where `adb shell` is already root.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-ADB=./tools/platform-tools/adb
+ADB=adb
 
 $ADB shell 'mount -o rw,remount /system'
 trap '$ADB shell "mount -o ro,remount /system" 2>/dev/null || true' EXIT

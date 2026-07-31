@@ -38,8 +38,8 @@ for the full derivation.
 
 Prerequisites:
 - JDK 21
-- An Android SDK checkout at `tools/android-sdk` with platform `android-34` and
-  build-tools `34.0.0` installed, and `local.properties` pointing `sdk.dir` at it.
+- An Android SDK with platform `android-34` and
+  build-tools `34.0.0`. Point `ANDROID_HOME` at it, or set `sdk.dir` in `local.properties`.
   `tools/` is gitignored and not committed — see
   [the plan's Task 1](docs/superpowers/plans/2026-07-30-glass-gesture-launcher.md) for
   how it was bootstrapped.
@@ -95,7 +95,7 @@ the gesture. Run this way, it **does not survive a reboot** — it must be start
 re-running `./run-daemon.sh` after every power cycle. This is the quickest way to try the
 daemon out or iterate on it during development.
 
-`adb` is not on `PATH` in this repo; it lives at `./tools/platform-tools/adb` and
+`adb` is not on `PATH` in this repo; it lives at `adb` and
 `run-daemon.sh` invokes it by that relative path.
 
 ### Boot persistence

@@ -1,6 +1,7 @@
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
+import java.util.Properties
 import java.io.DataOutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
@@ -161,7 +162,23 @@ val dexJar by tasks.registering(Exec::class) {
     group = "build"
     dependsOn(tasks.named("jar"), project(":gesture-core").tasks.named("jar"))
 
-    val sdkDir = File(rootProject.rootDir, "tools/android-sdk")
+    // Resolve the SDK the same way AGP does, so this works on any checkout:
+    // local.properties first, then the standard environment variables.
+    val sdkDir: File = run {
+        val props = Properties()
+        val localProps = File(rootProject.rootDir, "local.properties")
+        if (localProps.exists()) {
+            localProps.inputStream().use { props.load(it) }
+        }
+        val dir = props.getProperty("sdk.dir")
+            ?: System.getenv("ANDROID_HOME")
+            ?: System.getenv("ANDROID_SDK_ROOT")
+            ?: error(
+                "No Android SDK found. Set sdk.dir in local.properties, " +
+                    "or export ANDROID_HOME."
+            )
+        File(dir)
+    }
     val d8 = File(sdkDir, "build-tools/34.0.0/d8")
     val androidJar = File(sdkDir, "platforms/android-34/android.jar")
     val outputJar = layout.buildDirectory.file("libs/gestured.jar").get().asFile
