@@ -2875,11 +2875,174 @@ git commit -m "fix: reject ambiguous gestures and claim edge swipes from the sys
 
 ---
 
-## Deferred to Phase 3
+## Phase 3
 
-Explicitly out of scope for this plan, per spec §6:
+Both items below were deferred until the launcher and daemon were proven on hardware.
+That condition was met on 2026-07-30: the operator confirmed all seven gestures, and a
+physical two-finger downward swipe from inside another app produced
+`gestured: two-finger down -> home` with `mResumedActivity` becoming
+`com.android.launcher2.Launcher`.
 
-- Declaring `android.intent.category.HOME` on `LauncherActivity`.
-- Reboot persistence for the daemon via `/system/etc/install-recovery.sh` (spec §7.4).
+### Task 14: Daemon survives reboot
 
-Both should only be attempted once everything above is proven working.
+**Files:**
+- Create: `scripts/install-boot-hook.sh`
+- Modify: `README.md` (add an uninstall note)
+
+**Interfaces:**
+- Consumes: `daemon/build/libs/gestured.jar` from Task 11.
+- Produces: a daemon that starts automatically at every boot.
+
+**The hook, verified present on this device.** `/init.rc` line 593 declares:
+
+```
+service flash_recovery /system/bin/install-recovery.sh
+    class main
+    seclabel u:r:install_recovery:s0
+    oneshot
+```
+
+The script it names **does not exist**, so the service fails silently at every boot. Creating
+it makes init execute it as root at boot — no `init.rc` edit, no boot-image repacking.
+SELinux is Permissive, so the `install_recovery` seclabel imposes no restriction.
+
+Two constraints follow from the service definition. `class main` starts early, possibly
+before `system_server`, and `app_process` needs a live runtime — so the script must wait
+for `sys.boot_completed`. And `oneshot` means init waits for the script to exit, so it must
+background its work rather than blocking.
+
+- [ ] **Step 1: Move the jar somewhere durable**
+
+`/data/local/tmp` survives reboot but is a scratch location. Use `/system/bin` alongside
+the script so the daemon and its launcher live together.
+
+- [ ] **Step 2: Write `scripts/install-boot-hook.sh`**
+
+```bash
+#!/usr/bin/env bash
+# Installs the gesture daemon as a boot service on Google Glass.
+# Requires an eng/userdebug build where `adb shell` is already root.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+ADB=./tools/platform-tools/adb
+
+$ADB shell 'mount -o rw,remount /system' 
+$ADB push daemon/build/libs/gestured.jar /data/local/tmp/gestured.jar
+$ADB shell 'cp /data/local/tmp/gestured.jar /system/bin/gestured.jar'
+
+$ADB shell 'cat > /system/bin/install-recovery.sh <<EOF
+#!/system/bin/sh
+# Started by init (service flash_recovery, class main, oneshot).
+# Backgrounds immediately so init is not held, and waits for the framework
+# because app_process needs a live runtime.
+(
+  while [ "\$(getprop sys.boot_completed)" != "1" ]; do
+    sleep 2
+  done
+  export CLASSPATH=/system/bin/gestured.jar
+  exec app_process /system/bin dev.erinlkolp.glasslauncher.daemon.Main
+) &
+EOF'
+
+$ADB shell 'chmod 755 /system/bin/install-recovery.sh'
+$ADB shell 'chmod 644 /system/bin/gestured.jar'
+$ADB shell 'mount -o ro,remount /system'
+echo "Installed. Reboot with: $ADB reboot"
+```
+
+```bash
+chmod +x scripts/install-boot-hook.sh
+```
+
+- [ ] **Step 3: Install and verify before rebooting**
+
+```bash
+./scripts/install-boot-hook.sh
+./tools/platform-tools/adb shell 'ls -l /system/bin/install-recovery.sh /system/bin/gestured.jar'
+./tools/platform-tools/adb shell 'cat /system/bin/install-recovery.sh'
+```
+
+Confirm the script is mode 755 and its contents are correct. A malformed script here runs
+at every boot as root, so read it before rebooting.
+
+- [ ] **Step 4: Reboot and confirm**
+
+```bash
+./tools/platform-tools/adb reboot
+./tools/platform-tools/adb wait-for-device
+sleep 45
+./tools/platform-tools/adb shell 'ps | grep app_process'
+```
+
+Expected: an `app_process` running as root. Then have the operator perform a two-finger
+downward swipe from inside any app and confirm it goes home, with no daemon started
+manually.
+
+- [ ] **Step 5: Document removal**
+
+Add to `README.md`: removing the hook is
+`adb shell 'mount -o rw,remount /system && rm /system/bin/install-recovery.sh /system/bin/gestured.jar && mount -o ro,remount /system'`.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add scripts/install-boot-hook.sh README.md
+git commit -m "feat: install the gesture daemon as a boot service"
+```
+
+---
+
+### Task 15: Launcher becomes the home screen
+
+**Files:**
+- Modify: `app/src/main/AndroidManifest.xml`
+
+**Interfaces:**
+- Consumes: the working launcher from Tasks 8 and 13.
+- Produces: `LauncherActivity` as a HOME candidate.
+
+Do this **after** Task 14, so the daemon's global go-home is already boot-persistent before
+the launcher becomes the thing HOME resolves to.
+
+- [ ] **Step 1: Add the HOME filter**
+
+In `app/src/main/AndroidManifest.xml`, add a second intent-filter to `LauncherActivity`,
+leaving the existing `MAIN`/`LAUNCHER` filter untouched:
+
+```xml
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+```
+
+- [ ] **Step 2: Install and choose**
+
+```bash
+./gradlew :app:installDebug
+./tools/platform-tools/adb shell input keyevent KEYCODE_HOME
+./tools/platform-tools/adb shell dumpsys activity activities | grep mResumedActivity
+```
+
+Android presents a chooser the first time. The operator selects the Glass launcher.
+`com.android.launcher2.Launcher` stays installed as a fallback — do NOT uninstall it.
+
+- [ ] **Step 3: Verify the escape route still works**
+
+Critical check, because the launcher is now what HOME resolves to. Launch another app, then
+have the operator perform the two-finger downward swipe. Confirm `mResumedActivity` becomes
+`dev.erinlkolp.glasslauncher/.LauncherActivity`.
+
+If the launcher ever misbehaves, recovery is
+`adb shell cmd package set-home-activity com.android.launcher/com.android.launcher2.Launcher`,
+or on API 22 clearing defaults via
+`adb shell pm clear com.android.launcher` and re-choosing. Verify one of these works
+*before* relying on the new home screen.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add app/src/main/AndroidManifest.xml
+git commit -m "feat(app): declare LauncherActivity as a HOME candidate"
+```
