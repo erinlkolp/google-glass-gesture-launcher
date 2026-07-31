@@ -11,7 +11,7 @@ debug keystore — fine for sideloading onto a development device, not for distr
 ## Installing
 
 ```bash
-./tools/platform-tools/adb install -r apk/glass-launcher-v0.1-1-debug.apk
+adb install -r apk/glass-launcher-v0.1-1-debug.apk
 ```
 
 The APK declares both `LAUNCHER` and `HOME` intent filters, so after installing, Android
@@ -25,8 +25,8 @@ any app. It needs root, so it requires an `eng`/`userdebug` build where `adb she
 already uid 0.
 
 ```bash
-./tools/platform-tools/adb push apk/gestured.jar /data/local/tmp/
-./tools/platform-tools/adb shell "CLASSPATH=/data/local/tmp/gestured.jar \
+adb push apk/gestured.jar /data/local/tmp/
+adb shell "CLASSPATH=/data/local/tmp/gestured.jar \
     app_process /system/bin dev.erinlkolp.glasslauncher.daemon.Main"
 ```
 
