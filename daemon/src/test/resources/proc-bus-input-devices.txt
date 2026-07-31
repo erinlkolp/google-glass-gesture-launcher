@@ -1,0 +1,61 @@
+I: Bus=0000 Vendor=0000 Product=0000 Version=0000
+N: Name="twl6030_pwrbutton"
+P: Phys=twl6030_pwrbutton/input0
+S: Sysfs=/devices/platform/omap_i2c.1/i2c-1/1-0049/twl6030_pwrbutton/input/input0
+U: Uniq=
+H: Handlers=event0 
+B: PROP=0
+B: EV=3
+B: KEY=100000 0 0 0
+
+I: Bus=0000 Vendor=0000 Product=0000 Version=0000
+N: Name="ltr506_als"
+P: Phys=
+S: Sysfs=/devices/virtual/input/input1
+U: Uniq=
+H: Handlers=event1 
+B: PROP=0
+B: EV=9
+B: ABS=100 0
+
+I: Bus=0000 Vendor=0000 Product=0000 Version=0000
+N: Name="ltr506_ps"
+P: Phys=
+S: Sysfs=/devices/virtual/input/input2
+U: Uniq=
+H: Handlers=event2 
+B: PROP=0
+B: EV=9
+B: ABS=2000000
+
+I: Bus=0000 Vendor=0000 Product=0000 Version=0000
+N: Name="sensor00fn11"
+P: Phys=sensor00fn11/input0
+S: Sysfs=/devices/touchpad/input/input3
+U: Uniq=
+H: Handlers=event3 
+B: PROP=2
+B: EV=29
+B: ABS=6f30000 0
+B: SW=200
+
+I: Bus=0000 Vendor=0000 Product=0000 Version=0000
+N: Name="Notle Headset Jack"
+P: Phys=ALSA
+S: Sysfs=/devices/platform/omap-abe-twl6040/sound/card0/input4
+U: Uniq=
+H: Handlers=event4 
+B: PROP=0
+B: EV=21
+B: SW=14
+
+I: Bus=0019 Vendor=0001 Product=0001 Version=0100
+N: Name="gpio-keys"
+P: Phys=gpio-keys/input0
+S: Sysfs=/devices/platform/gpio-keys/input/input5
+U: Uniq=
+H: Handlers=event5 
+B: PROP=0
+B: EV=3
+B: KEY=100000 0 0 0 0 0 0
+

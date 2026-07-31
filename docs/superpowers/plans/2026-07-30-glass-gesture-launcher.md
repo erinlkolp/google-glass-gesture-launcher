@@ -2666,6 +2666,188 @@ git commit -m "docs: add README"
 
 ---
 
+### Task 13: Hardware-verification fixes
+
+**Run immediately after Task 8** — before Task 9. Both defects were found by physical
+on-device testing and both originate in this plan, not in implementer error.
+
+**Files:**
+- Modify: `gesture-core/src/main/java/dev/erinlkolp/glasslauncher/gesture/GlassGestureDetector.java`
+- Modify: `gesture-core/src/test/java/dev/erinlkolp/glasslauncher/gesture/GlassGestureDetectorTest.java`
+- Modify: `app/src/main/java/dev/erinlkolp/glasslauncher/LauncherActivity.java`
+
+**Interfaces:**
+- Consumes: everything from Tasks 2–8.
+- Produces: no API changes. `Gesture`, `TouchSample`, and the detector's constructor are
+  unchanged, so Task 11's daemon is unaffected.
+
+#### Defect 1 — ambiguous gestures degrade into `TAP`, launching apps
+
+Observed: a two-finger downward swipe launched the Camera app and fired the shutter.
+The activity-manager event log showed the launch carried flags `270532608`
+(`FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_RESET_TASK_IF_NEEDED`) — exactly what
+`launchSelected()` sets — proving our own launcher started it after classifying the
+swipe as `TAP`.
+
+Root cause: `TAP_SLOP = 40` native units is 3% of the pad's 1366-unit width but **21% of
+its 187-unit height**. A downward swipe that does not traverse a fifth of the short axis
+falls under the slop and reads as stationary. `TAP` also had no upper duration bound, so
+any sub-500 ms contact qualified.
+
+The fallback direction is what makes this serious: an unrecognised gesture should be a
+no-op, never "launch whatever is selected."
+
+- [ ] **Step 1: Write the failing tests**
+
+Append to `GlassGestureDetectorTest.java`:
+
+```java
+    /**
+     * A contact too slow to be a tap but too quick to be a long press must be
+     * NOTHING. Previously this returned TAP, which launched the selected app —
+     * the most destructive possible outcome for a misread gesture.
+     */
+    @Test
+    public void contactBetweenTapAndLongPressDurationsIsNotAGesture() {
+        List<TouchSample> trace = SwipeTrace.straight(300f, 180f, 304f, 181f, 350L, 1);
+        assertEquals(Gesture.NONE, SwipeTrace.play(detector, trace));
+    }
+
+    /**
+     * A short downward drag on the 187-unit-tall axis must not read as a tap.
+     * 30 screen px of vertical travel is only ~15.6 native units.
+     */
+    @Test
+    public void shortDownwardDragIsNotATap() {
+        List<TouchSample> trace = SwipeTrace.straight(300f, 100f, 302f, 130f, 200L, 1);
+        assertEquals(Gesture.NONE, SwipeTrace.play(detector, trace));
+    }
+
+    @Test
+    public void quickStationaryContactIsStillATap() {
+        List<TouchSample> trace = SwipeTrace.straight(300f, 180f, 302f, 181f, 90L, 1);
+        assertEquals(Gesture.TAP, SwipeTrace.play(detector, trace));
+    }
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `./gradlew :gesture-core:test`
+Expected: `contactBetweenTapAndLongPressDurationsIsNotAGesture` and
+`shortDownwardDragIsNotATap` FAIL, both reporting `TAP`.
+`quickStationaryContactIsStillATap` should already pass.
+
+- [ ] **Step 3: Tighten the tap constants**
+
+In `GlassGestureDetector.java`, replace the `TAP_SLOP` declaration and add a new bound:
+
+```java
+    /**
+     * Native units of travel below which a contact is stationary.
+     *
+     * <p>Deliberately tight. The pad is 1366 units wide but only 187 tall, so a
+     * generous slop that is negligible horizontally consumes a large fraction of
+     * the vertical range and swallows genuine downward swipes.
+     */
+    private static final float TAP_SLOP = 25.0f;
+    /** Contacts longer than this are too slow to be a tap. */
+    private static final long TAP_MAX_MS = 250L;
+```
+
+- [ ] **Step 4: Make the stationary branch reject ambiguity**
+
+In `classify()`, replace the whole `if (distance < TAP_SLOP) { ... }` block with:
+
+```java
+        if (distance < TAP_SLOP) {
+            if (multiTouch) {
+                // Two-finger taps carry no meaning in this design.
+                return Gesture.NONE;
+            }
+            if (durationMs >= LONG_PRESS_MS) {
+                return Gesture.LONG_PRESS;
+            }
+            if (durationMs <= TAP_MAX_MS) {
+                return Gesture.TAP;
+            }
+            // Between the two: too slow to be a tap, too quick to be a long
+            // press. Ambiguous input must be a no-op, never an app launch.
+            return Gesture.NONE;
+        }
+```
+
+Change nothing else in `classify()`.
+
+- [ ] **Step 5: Run tests to verify they pass**
+
+Run: `./gradlew :gesture-core:test`
+Expected: PASS, 21 tests — 4 in `TouchpadGeometryTest`, 17 in `GlassGestureDetectorTest`.
+
+#### Defect 2 — the system steals downward swipes
+
+Observed: swiping down opened the notification shade instead of reaching the app.
+
+Root cause: the `StatusBar` window holds `touchableRegion=[0,0][640,38]`. The pad's 187
+vertical units map onto 360 screen px, so the top ~20 native units of the strip fall
+inside that region and Android routes the swipe to the shade. `LauncherActivity` sets
+`SYSTEM_UI_FLAG_LOW_PROFILE`, which only dims navigation icons and does not prevent this.
+`SYSTEM_UI_FLAG_IMMERSIVE_STICKY` is the flag that keeps edge swipes with the app.
+
+- [ ] **Step 6: Replace the inert flag with immersive mode**
+
+In `LauncherActivity.java`, delete any existing `setSystemUiVisibility` call and add:
+
+```java
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) {
+            applyImmersiveMode();
+        }
+    }
+
+    /**
+     * Keeps edge swipes with this activity instead of the system.
+     *
+     * <p>The StatusBar window claims the top 38 px of the display as touchable.
+     * The touchpad's 187 vertical units are mapped onto 360 px, so the top ~20
+     * units of the strip land in that region and downward swipes were being
+     * routed to the notification shade. IMMERSIVE_STICKY suppresses that.
+     */
+    private void applyImmersiveMode() {
+        getWindow().getDecorView().setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_FULLSCREEN
+                        | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                        | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                        | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
+    }
+```
+
+Call `applyImmersiveMode()` at the end of `onCreate` as well, and add
+`import android.view.View;` if absent.
+
+- [ ] **Step 7: Verify on the device**
+
+```bash
+./gradlew :app:installDebug
+./tools/platform-tools/adb shell am start -n dev.erinlkolp.glasslauncher/.LauncherActivity
+./tools/platform-tools/adb shell input swipe 320 20 320 300 250
+./tools/platform-tools/adb shell dumpsys window windows | grep -E "StatusBar|mCurrentFocus"
+```
+
+Expected: focus remains on `LauncherActivity`; the shade does not open. A synthetic swipe
+is a weaker check than a real finger here, since the interception happens in the window
+manager — flag in the report that final confirmation needs the device operator.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add gesture-core/ app/
+git commit -m "fix: reject ambiguous gestures and claim edge swipes from the system"
+```
+
+---
+
 ## Deferred to Phase 3
 
 Explicitly out of scope for this plan, per spec §6:
