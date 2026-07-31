@@ -2088,7 +2088,11 @@ public final class EvdevDeviceLocator {
                 continue;
             }
             if (inStanza && trimmed.startsWith("H:")) {
-                for (String token : trimmed.substring(2).trim().split("\\s+")) {
+                // Split on '=' as well as whitespace. The real line is
+                // `H: Handlers=event3` with no space after the '=', so
+                // splitting on whitespace alone yields the single token
+                // "Handlers=event3", which matches no `event` prefix.
+                for (String token : trimmed.substring(2).trim().split("[\\s=]+")) {
                     if (token.startsWith("event")) {
                         return "/dev/input/" + token;
                     }
