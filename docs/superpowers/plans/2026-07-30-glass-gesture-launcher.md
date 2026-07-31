@@ -1267,7 +1267,9 @@ git commit -m "feat(app): add MotionEvent adapter and gesture debug overlay"
 - Produces:
   - `AppEntry(String label, String packageName, String activityName)` with public final fields of those names
   - `AppEntrySorter.sort(List<AppEntry> entries)` returning a new sorted, de-duplicated `List<AppEntry>`
-  - `AppRepository(PackageManager pm)` with `List<AppEntry> load()`
+  - `AppRepository(Context context)` with `List<AppEntry> load()`, `void start()`, `void stop()`.
+    `load()` returns a cached list; `start()`/`stop()` register and unregister the
+    package-change receiver that invalidates it, and are idempotent.
 
 Task 8 consumes `AppRepository.load()` and `AppEntry`'s fields.
 
@@ -1403,25 +1405,78 @@ Expected: PASS, 5 tests.
 
 - [ ] **Step 6: Write the repository**
 
+Per spec §4.2, the repository caches its result and invalidates on package changes.
+Enumeration is genuinely expensive here: the eng build carries development packages,
+and every entry costs a `loadLabel()` call that touches that package's resources.
+Rebuilding on every resume would stall visibly on an OMAP4430.
+
 ```java
 package dev.erinlkolp.glasslauncher;
 
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Queries the platform for launchable activities. */
+/**
+ * Queries the platform for launchable activities, caching the sorted result.
+ *
+ * <p>The cache is invalidated only when a package is actually installed,
+ * removed, or changed. Both {@link #load()} and the receiver run on the main
+ * thread, so the cache field needs no synchronisation.
+ */
 public final class AppRepository {
 
+    private final Context context;
     private final PackageManager packageManager;
 
-    public AppRepository(PackageManager packageManager) {
-        this.packageManager = packageManager;
+    private List<AppEntry> cache;
+    private boolean watching;
+
+    private final BroadcastReceiver packageWatcher = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context ignored, Intent intent) {
+            cache = null;
+        }
+    };
+
+    public AppRepository(Context context) {
+        this.context = context;
+        this.packageManager = context.getPackageManager();
     }
 
+    /** Begins watching for package changes. Idempotent; pair with {@link #stop()}. */
+    public void start() {
+        if (watching) {
+            return;
+        }
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(Intent.ACTION_PACKAGE_ADDED);
+        filter.addAction(Intent.ACTION_PACKAGE_REMOVED);
+        filter.addAction(Intent.ACTION_PACKAGE_CHANGED);
+        filter.addDataScheme("package");
+        context.registerReceiver(packageWatcher, filter);
+        watching = true;
+    }
+
+    /** Stops watching. Idempotent, so a double call cannot throw. */
+    public void stop() {
+        if (!watching) {
+            return;
+        }
+        context.unregisterReceiver(packageWatcher);
+        watching = false;
+    }
+
+    /** @return the cached sorted list, rebuilt only when the cache is invalid. */
     public List<AppEntry> load() {
+        if (cache != null) {
+            return cache;
+        }
         Intent intent = new Intent(Intent.ACTION_MAIN, null);
         intent.addCategory(Intent.CATEGORY_LAUNCHER);
 
@@ -1434,7 +1489,8 @@ public final class AppRepository {
                     info.activityInfo.packageName,
                     info.activityInfo.name));
         }
-        return AppEntrySorter.sort(entries);
+        cache = AppEntrySorter.sort(entries);
+        return cache;
     }
 }
 ```
@@ -1595,16 +1651,24 @@ public class LauncherActivity extends Activity {
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         detector = new GlassGestureDetector(TouchpadGeometry.GLASS, GestureOrientation.DEFAULT);
-        repository = new AppRepository(getPackageManager());
+        repository = new AppRepository(this);
+        repository.start();
         cardView = new AppCardView(this);
         cardView.setEntries(repository.load());
         setContentView(cardView);
     }
 
     @Override
+    protected void onDestroy() {
+        repository.stop();
+        super.onDestroy();
+    }
+
+    @Override
     protected void onResume() {
         super.onResume();
-        // Picks up anything installed or removed while we were backgrounded.
+        // Cheap: load() returns the cache unless a package actually changed,
+        // in which case the receiver has already invalidated it.
         cardView.setEntries(repository.load());
     }
 
