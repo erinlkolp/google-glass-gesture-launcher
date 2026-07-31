@@ -2875,6 +2875,399 @@ git commit -m "fix: reject ambiguous gestures and claim edge swipes from the sys
 
 ---
 
+### Task 16: Final-review fixes
+
+Found by the whole-branch review after Task 15. Several are defects that only came into
+existence when the launcher became HOME — no per-task review could have seen them, because
+each saw only its own diff.
+
+**Files:**
+- Modify: `app/src/main/java/dev/erinlkolp/glasslauncher/LauncherActivity.java`
+- Modify: `app/src/main/java/dev/erinlkolp/glasslauncher/AppCardView.java`
+- Modify: `app/src/main/AndroidManifest.xml`
+- Modify: `gesture-core/src/main/java/dev/erinlkolp/glasslauncher/gesture/GlassGestureDetector.java`
+- Modify: `daemon/src/main/java/dev/erinlkolp/glasslauncher/daemon/Main.java`
+- Modify: `scripts/install-boot-hook.sh`
+- Create: `daemon/src/test/java/dev/erinlkolp/glasslauncher/daemon/CapturedGestureReplayTest.java`
+- Create: `daemon/src/test/java/dev/erinlkolp/glasslauncher/daemon/GeteventFixture.java`
+- Modify: `README.md`
+
+#### Fix 1 (Critical): the home screen never sleeps
+
+`FLAG_KEEP_SCREEN_ON` was set when this was an ordinary app you would open and exit. It is
+now the always-visible idle surface, so the display never sleeps on a 570 mAh battery.
+
+- [ ] **Step 1: Remove the flag**
+
+Delete the `getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);` line
+from `onCreate`, and remove the now-unused `WindowManager` import.
+
+#### Fix 2 (Important): swipe-down has no destination
+
+`finish()` on the home activity makes ActivityManager relaunch it immediately — a black
+flash and a reset selection. At top level the gesture should do nothing.
+
+- [ ] **Step 2: Make top-level swipe-down a no-op**
+
+In `LauncherActivity.handle()`, replace the `SWIPE_DOWN` case with:
+
+```java
+            case SWIPE_DOWN:
+                // Dismiss the detail view if it is open. At top level, do nothing:
+                // this activity is the home screen, so finish() would simply cause
+                // ActivityManager to relaunch it.
+                if (cardView.isShowingDetail()) {
+                    cardView.setShowingDetail(false);
+                }
+                break;
+```
+
+#### Fix 3 (Important): selection is lost on every return
+
+`onResume` calls `setEntries`, which resets `selectedIndex` to 0. The daemon exists to
+bring the user back here, and they always land on entry 1.
+
+- [ ] **Step 3: Preserve selection when the list is unchanged**
+
+In `AppCardView.setEntries`, keep the index when the new list matches the old one:
+
+```java
+    public void setEntries(List<AppEntry> entries) {
+        boolean sameList = entries.size() == this.entries.size();
+        if (sameList) {
+            for (int i = 0; i < entries.size(); i++) {
+                if (!entries.get(i).activityName.equals(this.entries.get(i).activityName)) {
+                    sameList = false;
+                    break;
+                }
+            }
+        }
+        this.entries = entries;
+        if (!sameList) {
+            this.selectedIndex = 0;
+        } else if (this.selectedIndex >= entries.size()) {
+            this.selectedIndex = Math.max(0, entries.size() - 1);
+        }
+        invalidate();
+    }
+```
+
+#### Fix 4 (Important): missing home-activity manifest attributes
+
+AOSP's own Launcher2 declares these specifically so a home activity restarts cleanly after
+a low-memory kill. On a device where this is the only home screen, that is bootability.
+
+- [ ] **Step 4: Add the attributes**
+
+On the `<activity>` element in `AndroidManifest.xml`, add:
+
+```
+            android:launchMode="singleTask"
+            android:stateNotNeeded="true"
+            android:excludeFromRecents="true"
+            android:clearTaskOnLaunch="true"
+```
+
+Keep both existing intent-filters unchanged.
+
+#### Fix 5 (Important): the downward threshold sits inside the hardware margin
+
+Replaying `two-finger-down.getevent.txt`, the captured strokes travel dy = 63, 120, 86, and
+121 native units. `VERTICAL_THRESHOLD = 60` means one real stroke cleared it by 5%. The pad
+is 187 units tall and a finger typically lands mid-pad, so available downward travel is
+often only ~80 units.
+
+- [ ] **Step 5: Lower the threshold to 45**
+
+```java
+    /**
+     * Native units of vertical travel required to call a swipe vertical.
+     *
+     * <p>Deliberately well below the ~63-unit minimum observed in real captured
+     * downward swipes. The pad is only 187 units tall and fingers usually land
+     * mid-pad, so the usable downward range is often ~80 units — a threshold
+     * near that floor makes the gesture feel intermittent.
+     */
+    private static final float VERTICAL_THRESHOLD = 45.0f;
+```
+
+Existing tests still pass: `insufficientDownwardDragIsNeitherTapNorSwipe` travels 31.2
+native units, still below 45; every genuine down-swipe test travels ≥ 135.
+
+#### Fix 6 (MUST, from ledger triage): the daemon can give up permanently
+
+`Main` declares `throws IOException`, so an EIO on the device node kills it. The boot
+script's retry loop is capped at 5 attempts and does not break on a clean exit. Since the
+daemon is the only escape from a foreground app, five transient failures strand the user
+until a reboot they cannot trigger without adb.
+
+- [ ] **Step 6: Make the read loop survive I/O errors**
+
+In `Main`, wrap the read loop so a transient `IOException` retries instead of exiting.
+Keep the existing structure; add an outer loop with a bounded backoff:
+
+```java
+    public static void main(String[] args) throws InterruptedException {
+        String node = locateTouchpad();
+        if (node == null) {
+            System.err.println("gestured: could not find input device " + DEVICE_NAME);
+            System.exit(1);
+        }
+        System.out.println("gestured: watching " + node);
+
+        while (true) {
+            try {
+                watch(node);
+                System.err.println("gestured: input stream ended, reopening");
+            } catch (IOException e) {
+                System.err.println("gestured: read error, reopening: " + e.getMessage());
+            }
+            Thread.sleep(2000L);
+        }
+    }
+```
+
+Move the existing open-and-read body into a private `static void watch(String node) throws
+IOException`, keeping the detector and reader construction inside it so state resets on
+reopen. `locateTouchpad` keeps its `throws IOException`; catch it in `main` and exit 1 —
+if the device cannot be found at startup, retrying will not help.
+
+- [ ] **Step 7: Make the boot retry loop unbounded and break on success**
+
+In `scripts/install-boot-hook.sh`, change the installed script's retry loop to:
+
+```sh
+  echo "$(date): starting gestured" >> $LOG
+  export CLASSPATH=/system/bin/gestured.jar
+  while true; do
+    app_process /system/bin dev.erinlkolp.glasslauncher.daemon.Main </dev/null >> $LOG 2>&1
+    status=$?
+    echo "$(date): gestured exited with status $status" >> $LOG
+    if [ $status -eq 0 ]; then
+      echo "$(date): clean exit, not restarting" >> $LOG
+      break
+    fi
+    sleep 30
+  done
+```
+
+Unbounded with a 30-second backoff: a permanently broken install logs one line every 30s
+rather than silently giving up after 2.5 minutes, and a clean exit is treated as terminal.
+
+#### Fix 7 (highest value): replay the captured hardware fixtures
+
+The committed captures are the project's most valuable asset and are currently used by
+nothing. All six `EvdevReaderTest` cases are synthetic. Nothing feeds real data through
+`EvdevReader → GlassGestureDetector`, so the single most load-bearing behaviour has no test
+on realistic input.
+
+Note the fixtures are `getevent -lt` **text**, not raw binary, so the helper parses lines of
+the form `[ 5448.139709] EV_ABS ABS_MT_POSITION_X 0000000b`.
+
+- [ ] **Step 8: Write the fixture parser helper**
+
+`GeteventFixture.java` — reads a classpath resource and yields `InputEvent`s, reusing the
+existing synthetic-record trick so `InputEvent.parse` is exercised too:
+
+```java
+package dev.erinlkolp.glasslauncher.daemon;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+/** Parses captured `getevent -lt` text into InputEvent instances. */
+final class GeteventFixture {
+
+    private static final Pattern LINE = Pattern.compile(
+            "\\[\\s*([0-9.]+)\\]\\s+(EV_\\w+)\\s+(\\w+)\\s+(\\w+)");
+
+    private static final int EV_SYN = 0x00;
+    private static final int EV_ABS = 0x03;
+
+    static List<InputEvent> load(String resource) throws IOException {
+        List<InputEvent> events = new ArrayList<InputEvent>();
+        InputStream in = GeteventFixture.class.getResourceAsStream(resource);
+        if (in == null) {
+            throw new IOException("fixture not found: " + resource);
+        }
+        BufferedReader reader = new BufferedReader(new InputStreamReader(in, "UTF-8"));
+        try {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                Matcher m = LINE.matcher(line);
+                if (!m.find()) {
+                    continue;
+                }
+                Integer type = typeOf(m.group(2));
+                Integer code = codeOf(m.group(3));
+                if (type == null || code == null) {
+                    continue;
+                }
+                long micros = (long) (Double.parseDouble(m.group(1)) * 1_000_000.0);
+                int value;
+                try {
+                    value = (int) Long.parseLong(m.group(4), 16);
+                } catch (NumberFormatException notHex) {
+                    value = 0;
+                }
+                events.add(synthesize(type, code, value, micros));
+            }
+        } finally {
+            reader.close();
+        }
+        return events;
+    }
+
+    private static Integer typeOf(String name) {
+        if ("EV_ABS".equals(name)) return EV_ABS;
+        if ("EV_SYN".equals(name)) return EV_SYN;
+        return null;
+    }
+
+    private static Integer codeOf(String name) {
+        if ("ABS_MT_POSITION_X".equals(name)) return InputEvent.ABS_MT_POSITION_X;
+        if ("ABS_MT_POSITION_Y".equals(name)) return InputEvent.ABS_MT_POSITION_Y;
+        if ("ABS_MT_TRACKING_ID".equals(name)) return InputEvent.ABS_MT_TRACKING_ID;
+        if ("SYN_MT_REPORT".equals(name)) return InputEvent.SYN_MT_REPORT;
+        if ("SYN_REPORT".equals(name)) return InputEvent.SYN_REPORT;
+        return null;
+    }
+
+    /** Builds the 16-byte record so InputEvent.parse is exercised by the replay too. */
+    private static InputEvent synthesize(int type, int code, int value, long micros) {
+        long sec = micros / 1_000_000L;
+        long usec = micros % 1_000_000L;
+        byte[] b = new byte[InputEvent.SIZE_BYTES];
+        writeInt32(b, 0, (int) sec);
+        writeInt32(b, 4, (int) usec);
+        b[8] = (byte) (type & 0xFF);
+        b[9] = (byte) ((type >> 8) & 0xFF);
+        b[10] = (byte) (code & 0xFF);
+        b[11] = (byte) ((code >> 8) & 0xFF);
+        writeInt32(b, 12, value);
+        return InputEvent.parse(b, 0);
+    }
+
+    private static void writeInt32(byte[] b, int o, int v) {
+        b[o] = (byte) (v & 0xFF);
+        b[o + 1] = (byte) ((v >> 8) & 0xFF);
+        b[o + 2] = (byte) ((v >> 16) & 0xFF);
+        b[o + 3] = (byte) ((v >> 24) & 0xFF);
+    }
+
+    private GeteventFixture() {
+    }
+}
+```
+
+- [ ] **Step 9: Write the replay test**
+
+```java
+package dev.erinlkolp.glasslauncher.daemon;
+
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertEquals;
+import dev.erinlkolp.glasslauncher.gesture.Gesture;
+import dev.erinlkolp.glasslauncher.gesture.GestureOrientation;
+import dev.erinlkolp.glasslauncher.gesture.GlassGestureDetector;
+import dev.erinlkolp.glasslauncher.gesture.TouchSample;
+import dev.erinlkolp.glasslauncher.gesture.TouchpadGeometry;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import org.junit.Test;
+
+/**
+ * Replays real captures from the device through the full daemon pipeline:
+ * InputEvent.parse -> EvdevReader -> GlassGestureDetector.
+ *
+ * <p>These fixtures were recorded from physical swipes on the hardware. Without
+ * this test they are documentation; with it they are a regression guard against
+ * threshold drift and adapter divergence.
+ */
+public class CapturedGestureReplayTest {
+
+    private static List<Gesture> replay(String resource) throws IOException {
+        EvdevReader reader = new EvdevReader();
+        GlassGestureDetector detector =
+                new GlassGestureDetector(TouchpadGeometry.GLASS, GestureOrientation.DEFAULT);
+        List<Gesture> recognised = new ArrayList<Gesture>();
+        for (InputEvent event : GeteventFixture.load(resource)) {
+            TouchSample sample = reader.feed(event);
+            if (sample == null) {
+                continue;
+            }
+            Gesture g = detector.accept(sample);
+            if (g != Gesture.NONE) {
+                recognised.add(g);
+            }
+        }
+        return recognised;
+    }
+
+    @Test
+    public void capturedTwoFingerSwipesAreRecognisedAsTheHomeGesture() throws IOException {
+        List<Gesture> gestures = replay("/two-finger-down.getevent.txt");
+        assertTrue("expected at least one gesture from the capture, got " + gestures,
+                !gestures.isEmpty());
+        assertTrue("expected TWO_FINGER_SWIPE_DOWN in " + gestures,
+                gestures.contains(Gesture.TWO_FINGER_SWIPE_DOWN));
+    }
+
+    @Test
+    public void capturedSingleFingerSwipesNeverTriggerTheHomeGesture() throws IOException {
+        List<Gesture> gestures = replay("/single-finger-swipes.getevent.txt");
+        assertTrue("expected at least one gesture from the capture, got " + gestures,
+                !gestures.isEmpty());
+        assertEquals("single-finger capture must not produce the global home gesture",
+                false, gestures.contains(Gesture.TWO_FINGER_SWIPE_DOWN));
+    }
+
+    @Test
+    public void capturedSingleFingerCaptureContainsAForwardSwipe() throws IOException {
+        assertTrue(replay("/single-finger-swipes.getevent.txt")
+                .contains(Gesture.SWIPE_FORWARD));
+    }
+}
+```
+
+- [ ] **Step 10: Run the suite**
+
+Run: `./gradlew test`
+Expected: PASS. `gesture-core` 21, `app` 5, `daemon` 17 — 43 total.
+
+If the replay tests fail, that is a REAL finding about threshold or pipeline behaviour on
+genuine hardware data — report it rather than adjusting the assertions to match.
+
+- [ ] **Step 11: Correct the README**
+
+Change the claim that the daemon "reads `/dev/input/event3` directly" — it resolves the node
+by name via `EvdevDeviceLocator`, so it tolerates renumbering across boots. Also update the
+gesture table: swipe-down no longer exits the launcher.
+
+- [ ] **Step 12: Verify on device and commit**
+
+```bash
+./gradlew :app:installDebug
+./scripts/install-boot-hook.sh
+./tools/platform-tools/adb reboot
+```
+
+Confirm the device boots into the launcher, the daemon starts, and the screen now sleeps.
+
+```bash
+git add -A
+git commit -m "fix: address final-review findings from the whole-branch review"
+```
+
+---
+
 ## Phase 3
 
 Both items below were deferred until the launcher and daemon were proven on hardware.
