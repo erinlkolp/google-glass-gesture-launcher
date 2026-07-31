@@ -16,3 +16,7 @@ probe-output.txt
 
 # Claude Code local state
 .claude/settings.local.json*
+
+# Shipped build artifacts (the *.apk rule above would otherwise catch these)
+!apk/
+!apk/*.apk
