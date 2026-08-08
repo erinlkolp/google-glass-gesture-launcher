@@ -152,6 +152,11 @@ public interface Tile {
 The `activate` body is moved verbatim from `LauncherActivity.launchSelected()`
 (`LauncherActivity.java:132-146`), including the broad `catch (Exception)` and Toast.
 
+**This deliberately duplicates `launchSelected()` for the duration of Tasks 1-3.**
+Deleting the original here would mean retyping `AppCardView`'s generics in the same
+commit, which is Task 4's job. The duplicate original is removed in Task 4 step 2. Keep
+the two bodies identical until then — do not "improve" this copy.
+
 ```java
 package dev.erinlkolp.glasslauncher;
 
@@ -224,6 +229,7 @@ consumes it yet — Task 4 wires it in.
 
 **Files:**
 - Create: `app/src/main/java/dev/erinlkolp/glasslauncher/TileSelection.java`
+- Create: `app/src/test/java/dev/erinlkolp/glasslauncher/FakeTile.java` (shared test double)
 - Test: `app/src/test/java/dev/erinlkolp/glasslauncher/TileSelectionTest.java`
 
 **Interfaces:**
@@ -237,13 +243,60 @@ a reload only when the new list holds the same entries in the same order; otherw
 resets to 0. `move()` clamps to both ends. `move()` and `recenter()` on an empty list must
 not throw.
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Write the shared test double**
+
+`FakeTile` is used by this task and by Task 3, so it is a top-level test class rather
+than a private inner class duplicated in each suite. It implements `activate(Context)`
+only because the interface requires it — the parameter type is never resolved at runtime
+and the method is never called.
+
+Create `app/src/test/java/dev/erinlkolp/glasslauncher/FakeTile.java`:
+
+```java
+package dev.erinlkolp.glasslauncher;
+
+import android.content.Context;
+import java.util.Collections;
+import java.util.List;
+
+/**
+ * A tile that exists only to carry a key.
+ *
+ * <p>Test-source only. {@link #activate(Context)} is deliberately empty: these tests
+ * cover list and selection behaviour, never activation.
+ */
+final class FakeTile implements Tile {
+
+    private final String key;
+
+    FakeTile(String key) {
+        this.key = key;
+    }
+
+    @Override
+    public String label() {
+        return key;
+    }
+
+    @Override
+    public List<String> detailLines() {
+        return Collections.emptyList();
+    }
+
+    @Override
+    public String key() {
+        return key;
+    }
+
+    @Override
+    public void activate(Context context) {
+    }
+}
+```
+
+- [ ] **Step 2: Write the failing test**
 
 Create `app/src/test/java/dev/erinlkolp/glasslauncher/TileSelectionTest.java`.
-
-Note the `FakeTile`: it implements `activate(Context)` because the interface requires it,
-which is safe here because the parameter type is never resolved at runtime and the method
-is never called.
 
 ```java
 package dev.erinlkolp.glasslauncher;
@@ -251,43 +304,12 @@ package dev.erinlkolp.glasslauncher;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
-import android.content.Context;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import org.junit.Test;
 
 public class TileSelectionTest {
-
-    /** Never activated; only its key matters to TileSelection. */
-    private static final class FakeTile implements Tile {
-
-        private final String key;
-
-        FakeTile(String key) {
-            this.key = key;
-        }
-
-        @Override
-        public String label() {
-            return key;
-        }
-
-        @Override
-        public List<String> detailLines() {
-            return Collections.emptyList();
-        }
-
-        @Override
-        public String key() {
-            return key;
-        }
-
-        @Override
-        public void activate(Context context) {
-        }
-    }
 
     private static List<Tile> tiles(String... keys) {
         List<Tile> result = new ArrayList<Tile>();
@@ -371,12 +393,12 @@ public class TileSelectionTest {
 }
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [ ] **Step 3: Run the test to verify it fails**
 
 Run: `./gradlew :app:testDebugUnitTest --tests '*TileSelectionTest*'`
 Expected: FAIL — compilation error, `cannot find symbol: class TileSelection`.
 
-- [ ] **Step 3: Write `TileSelection.java`**
+- [ ] **Step 4: Write `TileSelection.java`**
 
 ```java
 package dev.erinlkolp.glasslauncher;
@@ -456,15 +478,16 @@ public final class TileSelection {
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [ ] **Step 5: Run the test to verify it passes**
 
 Run: `./gradlew :app:testDebugUnitTest --tests '*TileSelectionTest*'`
 Expected: PASS, 7 tests.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add app/src/main/java/dev/erinlkolp/glasslauncher/TileSelection.java \
+        app/src/test/java/dev/erinlkolp/glasslauncher/FakeTile.java \
         app/src/test/java/dev/erinlkolp/glasslauncher/TileSelectionTest.java
 git commit -m "feat: extract selection and list diff into a pure TileSelection"
 ```
@@ -481,8 +504,10 @@ the placement rule is testable.
 - Test: `app/src/test/java/dev/erinlkolp/glasslauncher/TileListBuilderTest.java`
 
 **Interfaces:**
-- Consumes: `Tile`, `AppTile` (Task 1), `AppEntry` (existing)
+- Consumes: `Tile`, `AppTile` (Task 1), `AppEntry` (existing), `FakeTile` (Task 2, test source)
 - Produces: `static List<Tile> TileListBuilder.build(List<Tile> pinned, List<AppEntry> apps)`
+
+`FakeTile` already exists in the test source set from Task 2 — use it, do not redefine it.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -492,41 +517,12 @@ Create `app/src/test/java/dev/erinlkolp/glasslauncher/TileListBuilderTest.java`:
 package dev.erinlkolp.glasslauncher;
 
 import static org.junit.Assert.assertEquals;
-import android.content.Context;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import org.junit.Test;
 
 public class TileListBuilderTest {
-
-    private static final class FakeTile implements Tile {
-
-        private final String key;
-
-        FakeTile(String key) {
-            this.key = key;
-        }
-
-        @Override
-        public String label() {
-            return key;
-        }
-
-        @Override
-        public List<String> detailLines() {
-            return Collections.emptyList();
-        }
-
-        @Override
-        public String key() {
-            return key;
-        }
-
-        @Override
-        public void activate(Context context) {
-        }
-    }
 
     private static AppEntry entry(String label) {
         return new AppEntry(label, "com.example." + label, label + "Activity");
