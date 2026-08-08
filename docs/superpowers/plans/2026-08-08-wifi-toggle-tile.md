@@ -31,9 +31,15 @@ that does not touch `WifiManager` gets plain JVM tests.
 - **Display:** see-through optics wash out mid-tones. Pure white on pure black only.
   State is conveyed as **text**, never colour.
 - `minSdk = 22`, `targetSdk = 22`, `applicationId dev.erinlkolp.glasslauncher`.
-- Existing tests must stay green: 21 in `gesture-core`, 5 in `app`, 16 in `daemon`.
+- Existing tests must stay green: 21 in `gesture-core`, 5 in `app`, 16 in `daemon` —
+  42 unique `@Test` methods.
+- **`app` runs its unit tests twice**, once per build variant, so `./gradlew test`
+  reports the `app` figure doubled (5 unique → 10 executions) while `gesture-core` and
+  `daemon` are counted once. Per-task verification therefore uses
+  `:app:testDebugUnitTest`, which reports unique counts. Expected counts below are
+  unique `@Test` methods unless stated otherwise.
 - Run all tests with `./gradlew test`. Build and install with `./gradlew :app:installDebug`.
-- `adb` is not on `PATH` in this repo; it lives at `./adb`.
+- `adb` is on `PATH` (`~/Android/Sdk/platform-tools/adb`). The README's claim that it lives at a repo-relative path is stale — there is no `./adb`.
 
 ---
 
@@ -101,7 +107,7 @@ public class AppTileTest {
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `./gradlew :app:test --tests '*AppTileTest*'`
+Run: `./gradlew :app:testDebugUnitTest --tests '*AppTileTest*'`
 Expected: FAIL — compilation error, `cannot find symbol: class AppTile`.
 
 - [ ] **Step 3: Write `Tile.java`**
@@ -197,7 +203,7 @@ public final class AppTile implements Tile {
 
 - [ ] **Step 5: Run the test to verify it passes**
 
-Run: `./gradlew :app:test --tests '*AppTileTest*'`
+Run: `./gradlew :app:testDebugUnitTest --tests '*AppTileTest*'`
 Expected: PASS, 4 tests.
 
 - [ ] **Step 6: Commit**
@@ -367,7 +373,7 @@ public class TileSelectionTest {
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `./gradlew :app:test --tests '*TileSelectionTest*'`
+Run: `./gradlew :app:testDebugUnitTest --tests '*TileSelectionTest*'`
 Expected: FAIL — compilation error, `cannot find symbol: class TileSelection`.
 
 - [ ] **Step 3: Write `TileSelection.java`**
@@ -452,7 +458,7 @@ public final class TileSelection {
 
 - [ ] **Step 4: Run the test to verify it passes**
 
-Run: `./gradlew :app:test --tests '*TileSelectionTest*'`
+Run: `./gradlew :app:testDebugUnitTest --tests '*TileSelectionTest*'`
 Expected: PASS, 7 tests.
 
 - [ ] **Step 5: Commit**
@@ -581,7 +587,7 @@ public class TileListBuilderTest {
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `./gradlew :app:test --tests '*TileListBuilderTest*'`
+Run: `./gradlew :app:testDebugUnitTest --tests '*TileListBuilderTest*'`
 Expected: FAIL — compilation error, `cannot find symbol: class TileListBuilder`.
 
 - [ ] **Step 3: Write `TileListBuilder.java`**
@@ -615,7 +621,7 @@ public final class TileListBuilder {
 
 - [ ] **Step 4: Run the test to verify it passes**
 
-Run: `./gradlew :app:test --tests '*TileListBuilderTest*'`
+Run: `./gradlew :app:testDebugUnitTest --tests '*TileListBuilderTest*'`
 Expected: PASS, 5 tests.
 
 - [ ] **Step 5: Commit**
@@ -829,15 +835,17 @@ Also delete the now-stale comment above the old `onResume` body
 - [ ] **Step 3: Run the full suite**
 
 Run: `./gradlew test`
-Expected: PASS. 21 `gesture-core` + 21 `app` (5 existing + 16 new) + 16 `daemon` = 58.
+Expected: PASS, 58 unique tests — 21 `gesture-core` + 21 `app` (5 existing + 16 new)
++ 16 `daemon`. Gradle's own output will show 79 executions, because the 21 `app` tests
+run under both variants; that is expected, not a duplicate-test bug.
 
 - [ ] **Step 4: Install and verify no regression on device**
 
 ```bash
 ./gradlew :app:installDebug
-./adb shell am force-stop dev.erinlkolp.glasslauncher
-./adb shell am start -n dev.erinlkolp.glasslauncher/.LauncherActivity
-./adb shell screencap -p /sdcard/tile-refactor.png && ./adb pull /sdcard/tile-refactor.png /tmp/
+adb shell am force-stop dev.erinlkolp.glasslauncher
+adb shell am start -n dev.erinlkolp.glasslauncher/.LauncherActivity
+adb shell screencap -p /sdcard/tile-refactor.png && adb pull /sdcard/tile-refactor.png /tmp/
 ```
 
 Confirm by eye and by touchpad: the first card is still an app (**not** Wi-Fi — that is
@@ -940,7 +948,7 @@ public class WifiStateTest {
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `./gradlew :app:test --tests '*WifiStateTest*'`
+Run: `./gradlew :app:testDebugUnitTest --tests '*WifiStateTest*'`
 Expected: FAIL — compilation error, `cannot find symbol: class WifiState`.
 
 - [ ] **Step 3: Write `WifiState.java`**
@@ -1005,7 +1013,7 @@ public enum WifiState {
 
 - [ ] **Step 4: Run the test to verify it passes**
 
-Run: `./gradlew :app:test --tests '*WifiStateTest*'`
+Run: `./gradlew :app:testDebugUnitTest --tests '*WifiStateTest*'`
 Expected: PASS, 5 tests.
 
 If instead it fails at runtime with `java.lang.RuntimeException: Method ... not mocked`,
@@ -1218,7 +1226,8 @@ directly after `onResume()`:
 - [ ] **Step 4: Run the full suite**
 
 Run: `./gradlew test`
-Expected: PASS, 63 total (21 `gesture-core` + 26 `app` + 16 `daemon`). No existing test
+Expected: PASS, 63 unique tests (21 `gesture-core` + 26 `app` + 16 `daemon`); Gradle
+reports 89 executions for the reason given in the Global Constraints. No existing test
 should have changed.
 
 - [ ] **Step 5: Commit**
@@ -1243,22 +1252,22 @@ proven. **Do not skip or summarise this task** — record the real command outpu
 
 ```bash
 ./gradlew :app:installDebug
-./adb shell am force-stop dev.erinlkolp.glasslauncher
-./adb shell am start -n dev.erinlkolp.glasslauncher/.LauncherActivity
+adb shell am force-stop dev.erinlkolp.glasslauncher
+adb shell am start -n dev.erinlkolp.glasslauncher/.LauncherActivity
 ```
 
 - [ ] **Step 2: Confirm the starting state is off**
 
 ```bash
-./adb shell settings get global wifi_on
+adb shell settings get global wifi_on
 ```
-Expected: `0`. If it prints `1`, turn it off first (`./adb shell svc wifi disable`) so
+Expected: `0`. If it prints `1`, turn it off first (`adb shell svc wifi disable`) so
 that step 4 exercises the slower off→on direction.
 
 - [ ] **Step 3: Confirm the tile is first and reads "Wi-Fi: Off"**
 
 ```bash
-./adb shell screencap -p /sdcard/wifi-off.png && ./adb pull /sdcard/wifi-off.png /tmp/
+adb shell screencap -p /sdcard/wifi-off.png && adb pull /sdcard/wifi-off.png /tmp/
 ```
 
 Check the pulled image: the label reads `Wi-Fi: Off`, the counter reads `1 / N` where N
@@ -1271,8 +1280,8 @@ ordinary `SOURCE_TOUCHSCREEN`, so a synthetic down/up reaches `onTouchEvent` and
 `GlassGestureDetector` classifies it as `TAP` exactly like a real one:
 
 ```bash
-./adb shell input tap 320 180 && ./adb shell screencap -p /sdcard/wifi-turning-on.png \
-    && ./adb pull /sdcard/wifi-turning-on.png /tmp/
+adb shell input tap 320 180 && adb shell screencap -p /sdcard/wifi-turning-on.png \
+    && adb pull /sdcard/wifi-turning-on.png /tmp/
 ```
 
 If `input tap` does not register (the detector applies its own movement and duration
@@ -1287,15 +1296,15 @@ label the tile can render and the one width check that matters. If it is clipped
 - [ ] **Step 5: Confirm the radio actually came on**
 
 ```bash
-./adb shell settings get global wifi_on
-./adb shell dumpsys wifi | head -1
+adb shell settings get global wifi_on
+adb shell dumpsys wifi | head -1
 ```
 Expected: `1`, and the `dumpsys` line no longer reads `Wi-Fi is disabled`.
 
 - [ ] **Step 6: Confirm the tile settled on "Wi-Fi: On"**
 
 ```bash
-./adb shell screencap -p /sdcard/wifi-on.png && ./adb pull /sdcard/wifi-on.png /tmp/
+adb shell screencap -p /sdcard/wifi-on.png && adb pull /sdcard/wifi-on.png /tmp/
 ```
 Expected: `Wi-Fi: On` — proving the broadcast receiver repainted the card without any
 interaction.
@@ -1303,9 +1312,9 @@ interaction.
 - [ ] **Step 7: Toggle back off**
 
 ```bash
-./adb shell input tap 320 180
+adb shell input tap 320 180
 sleep 6
-./adb shell settings get global wifi_on
+adb shell settings get global wifi_on
 ```
 Expected: `0`. The `sleep` matters — the radio takes several seconds to come down, and
 reading too early returns the pre-transition value.
@@ -1401,8 +1410,8 @@ Change the filename in the table row and in the `adb install -r` command from
 - [ ] **Step 7: Verify the refreshed APK installs and runs**
 
 ```bash
-./adb install -r apk/glass-launcher-v0.2-2-debug.apk
-./adb shell dumpsys package dev.erinlkolp.glasslauncher | grep -E 'versionCode|versionName'
+adb install -r apk/glass-launcher-v0.2-2-debug.apk
+adb shell dumpsys package dev.erinlkolp.glasslauncher | grep -E 'versionCode|versionName'
 ```
 Expected: `versionCode=2`, `versionName=0.2`.
 
