@@ -49,10 +49,23 @@ Prerequisites:
 ./gradlew :app:installDebug
 ```
 
-`./gradlew test` runs all unit tests across the three modules (40 total: 21 in
-`gesture-core`, 5 in `app`, 14 in `daemon`). `:app:installDebug` builds and installs the
+`./gradlew test` runs all unit tests across the three modules (63 total: 21 in
+`gesture-core`, 26 in `app`, 16 in `daemon`). `:app:installDebug` builds and installs the
 launcher APK onto a connected device via the Android Gradle Plugin (no `adb` on `PATH`
 required for this one — AGP drives the install itself).
+
+## Tiles
+
+The card list is not only apps. The first card is always the Wi-Fi toggle; the installed
+apps follow it in alphabetical order. Tapping the Wi-Fi card flips the radio and the
+label tracks the change, including the `Turning on…` / `Turning off…` states, and it also
+reflects changes made by other apps while the launcher is on screen.
+
+State is shown as text rather than colour on purpose: the see-through display washes out
+anything that is not pure black or pure white.
+
+This works because the device is API 22 — `WifiManager.setWifiEnabled()` was not
+restricted until API 29, so no trip out to Settings is needed.
 
 ## Gesture reference
 
@@ -64,10 +77,10 @@ In-app gestures, handled by `LauncherActivity`:
 | Swipe backward (one finger) | Select previous app |
 | Two-finger swipe forward | Jump ahead 10 entries |
 | Two-finger swipe backward | Jump back 10 entries |
-| Tap | Launch selected app |
+| Tap | Activate the selected tile — launch an app, or toggle Wi-Fi |
 | Long press | Toggle detail view (package + activity name) |
 | Swipe down | Close detail view if open, otherwise no-op |
-| Camera button | Recenter selection to the first app |
+| Camera button | Recenter selection to the first tile (the Wi-Fi toggle) |
 
 Handled globally by the root daemon, independent of which app is foregrounded:
 
@@ -95,8 +108,7 @@ the gesture. Run this way, it **does not survive a reboot** — it must be start
 re-running `./run-daemon.sh` after every power cycle. This is the quickest way to try the
 daemon out or iterate on it during development.
 
-`adb` is not on `PATH` in this repo; it lives at `adb` and
-`run-daemon.sh` invokes it by that relative path.
+`adb` is expected to be on `PATH`; `run-daemon.sh` invokes it directly.
 
 ### Boot persistence
 

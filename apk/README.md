@@ -5,13 +5,13 @@ debug keystore — fine for sideloading onto a development device, not for distr
 
 | File | What it is |
 |---|---|
-| `glass-launcher-v0.1-1-debug.apk` | The launcher app. `applicationId dev.erinlkolp.glasslauncher`, `minSdk 22`, `targetSdk 22`. |
+| `glass-launcher-v0.2-2-debug.apk` | The launcher app. `applicationId dev.erinlkolp.glasslauncher`, `minSdk 22`, `targetSdk 22`. |
 | `gestured.jar` | The root daemon, already dex'd. Run via `app_process`, not installable as an app. |
 
 ## Installing
 
 ```bash
-adb install -r apk/glass-launcher-v0.1-1-debug.apk
+adb install -r apk/glass-launcher-v0.2-2-debug.apk
 ```
 
 The APK declares both `LAUNCHER` and `HOME` intent filters, so after installing, Android
