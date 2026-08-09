@@ -5,18 +5,22 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.view.View;
-import java.util.ArrayList;
 import java.util.List;
 
-/** Draws the currently selected app entry, one at a time. */
+/** Draws the currently selected tile, one at a time. */
 public final class AppCardView extends View {
+
+    /** Vertical gap between successive detail lines. */
+    private static final float DETAIL_LINE_HEIGHT = 22.0f;
+
+    /** Offset of the first detail line below the label baseline. */
+    private static final float DETAIL_TOP_OFFSET = 34.0f;
 
     private final Paint labelPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint detailPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint counterPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
-    private List<AppEntry> entries = new ArrayList<AppEntry>();
-    private int selectedIndex;
+    private final TileSelection selection = new TileSelection();
     private boolean showingDetail;
 
     public AppCardView(Context context) {
@@ -36,43 +40,24 @@ public final class AppCardView extends View {
         counterPaint.setTextAlign(Paint.Align.CENTER);
     }
 
-    public void setEntries(List<AppEntry> entries) {
-        boolean sameList = entries.size() == this.entries.size();
-        if (sameList) {
-            for (int i = 0; i < entries.size(); i++) {
-                if (!entries.get(i).activityName.equals(this.entries.get(i).activityName)) {
-                    sameList = false;
-                    break;
-                }
-            }
-        }
-        this.entries = entries;
-        if (!sameList) {
-            this.selectedIndex = 0;
-        } else if (this.selectedIndex >= entries.size()) {
-            this.selectedIndex = Math.max(0, entries.size() - 1);
-        }
+    public void setEntries(List<Tile> tiles) {
+        selection.setTiles(tiles);
         invalidate();
     }
 
-    public AppEntry selected() {
-        if (entries.isEmpty()) {
-            return null;
-        }
-        return entries.get(selectedIndex);
+    /** @return the selected tile, or null when there is nothing to show. */
+    public Tile selected() {
+        return selection.selected();
     }
 
     /** Moves the selection by {@code delta}, clamped to the list bounds. */
     public void move(int delta) {
-        if (entries.isEmpty()) {
-            return;
-        }
-        selectedIndex = Math.max(0, Math.min(entries.size() - 1, selectedIndex + delta));
+        selection.move(delta);
         invalidate();
     }
 
     public void recenter() {
-        selectedIndex = 0;
+        selection.recenter();
         invalidate();
     }
 
@@ -91,19 +76,24 @@ public final class AppCardView extends View {
         float centerX = getWidth() / 2.0f;
         float centerY = getHeight() / 2.0f;
 
-        if (entries.isEmpty()) {
-            canvas.drawText("No launchable apps", centerX, centerY, labelPaint);
+        if (selection.isEmpty()) {
+            canvas.drawText("No tiles", centerX, centerY, labelPaint);
             return;
         }
 
-        AppEntry entry = entries.get(selectedIndex);
-        canvas.drawText(entry.label, centerX, centerY, labelPaint);
-        canvas.drawText((selectedIndex + 1) + " / " + entries.size(),
+        Tile tile = selection.selected();
+        // Labels are read at draw time so a stateful tile repaints correctly on
+        // nothing more than invalidate().
+        canvas.drawText(tile.label(), centerX, centerY, labelPaint);
+        canvas.drawText((selection.selectedIndex() + 1) + " / " + selection.size(),
                 centerX, getHeight() - 20.0f, counterPaint);
 
         if (showingDetail) {
-            canvas.drawText(entry.packageName, centerX, centerY + 34.0f, detailPaint);
-            canvas.drawText(entry.activityName, centerX, centerY + 56.0f, detailPaint);
+            List<String> lines = tile.detailLines();
+            for (int i = 0; i < lines.size(); i++) {
+                canvas.drawText(lines.get(i), centerX,
+                        centerY + DETAIL_TOP_OFFSET + i * DETAIL_LINE_HEIGHT, detailPaint);
+            }
         }
     }
 }
