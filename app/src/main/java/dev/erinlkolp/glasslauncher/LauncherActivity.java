@@ -1,18 +1,17 @@
 package dev.erinlkolp.glasslauncher;
 
 import android.app.Activity;
-import android.content.ComponentName;
-import android.content.Intent;
 import android.os.Bundle;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
-import android.widget.Toast;
 import dev.erinlkolp.glasslauncher.gesture.Gesture;
 import dev.erinlkolp.glasslauncher.gesture.GestureOrientation;
 import dev.erinlkolp.glasslauncher.gesture.GlassGestureDetector;
 import dev.erinlkolp.glasslauncher.gesture.TouchSample;
 import dev.erinlkolp.glasslauncher.gesture.TouchpadGeometry;
+import java.util.Collections;
+import java.util.List;
 
 public class LauncherActivity extends Activity {
 
@@ -31,7 +30,7 @@ public class LauncherActivity extends Activity {
         repository = new AppRepository(this);
         repository.start();
         cardView = new AppCardView(this);
-        cardView.setEntries(repository.load());
+        refreshTiles();
         setContentView(cardView);
         applyImmersiveMode();
     }
@@ -69,9 +68,7 @@ public class LauncherActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
-        // Cheap: load() returns the cache unless a package actually changed,
-        // in which case the receiver has already invalidated it.
-        cardView.setEntries(repository.load());
+        refreshTiles();
     }
 
     @Override
@@ -108,7 +105,7 @@ public class LauncherActivity extends Activity {
                 cardView.move(-PAGE_JUMP);
                 break;
             case TAP:
-                launchSelected();
+                activateSelected();
                 break;
             case LONG_PRESS:
                 cardView.setShowingDetail(!cardView.isShowingDetail());
@@ -129,19 +126,25 @@ public class LauncherActivity extends Activity {
         }
     }
 
-    private void launchSelected() {
-        AppEntry entry = cardView.selected();
-        if (entry == null) {
+    /** The tiles pinned ahead of the app list. */
+    private List<Tile> pinnedTiles() {
+        return Collections.emptyList();
+    }
+
+    /**
+     * Rebuilds the card list. Cheap: {@link AppRepository#load()} returns its cache
+     * unless a package actually changed, and {@link TileSelection} keeps the selection
+     * when the rebuilt list is identical.
+     */
+    private void refreshTiles() {
+        cardView.setEntries(TileListBuilder.build(pinnedTiles(), repository.load()));
+    }
+
+    private void activateSelected() {
+        Tile tile = cardView.selected();
+        if (tile == null) {
             return;
         }
-        Intent intent = new Intent(Intent.ACTION_MAIN);
-        intent.addCategory(Intent.CATEGORY_LAUNCHER);
-        intent.setComponent(new ComponentName(entry.packageName, entry.activityName));
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
-        try {
-            startActivity(intent);
-        } catch (Exception e) {
-            Toast.makeText(this, "Could not launch " + entry.label, Toast.LENGTH_SHORT).show();
-        }
+        tile.activate(this);
     }
 }
