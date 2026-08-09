@@ -1,6 +1,11 @@
 package dev.erinlkolp.glasslauncher;
 
 import android.app.Activity;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.net.wifi.WifiManager;
 import android.os.Bundle;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
@@ -21,6 +26,16 @@ public class LauncherActivity extends Activity {
     private GlassGestureDetector detector;
     private AppCardView cardView;
     private AppRepository repository;
+    private WifiTile wifiTile;
+    private boolean watchingWifi;
+
+    private final BroadcastReceiver wifiWatcher = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context ignored, Intent intent) {
+            // WifiTile reads its state at draw time, so a repaint is all that is needed.
+            cardView.invalidate();
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -29,6 +44,7 @@ public class LauncherActivity extends Activity {
         detector = new GlassGestureDetector(TouchpadGeometry.GLASS, GestureOrientation.DEFAULT);
         repository = new AppRepository(this);
         repository.start();
+        wifiTile = new WifiTile(this);
         cardView = new AppCardView(this);
         refreshTiles();
         setContentView(cardView);
@@ -69,6 +85,13 @@ public class LauncherActivity extends Activity {
     protected void onResume() {
         super.onResume();
         refreshTiles();
+        startWatchingWifi();
+    }
+
+    @Override
+    protected void onPause() {
+        stopWatchingWifi();
+        super.onPause();
     }
 
     @Override
@@ -128,7 +151,27 @@ public class LauncherActivity extends Activity {
 
     /** The tiles pinned ahead of the app list. */
     private List<Tile> pinnedTiles() {
-        return Collections.emptyList();
+        return Collections.<Tile>singletonList(wifiTile);
+    }
+
+    /**
+     * Registered only while the launcher is resumed: Wi-Fi state does not matter when
+     * the cards are not on screen, and launching an app pauses this activity.
+     */
+    private void startWatchingWifi() {
+        if (watchingWifi) {
+            return;
+        }
+        registerReceiver(wifiWatcher, new IntentFilter(WifiManager.WIFI_STATE_CHANGED_ACTION));
+        watchingWifi = true;
+    }
+
+    private void stopWatchingWifi() {
+        if (!watchingWifi) {
+            return;
+        }
+        unregisterReceiver(wifiWatcher);
+        watchingWifi = false;
     }
 
     /**
