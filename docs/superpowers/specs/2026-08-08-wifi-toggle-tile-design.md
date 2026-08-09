@@ -106,12 +106,13 @@ refactor of the view layer. It is what makes risk §10.2 testable.
 
 ```java
 final class TileSelection {          // pure: no android imports
-    void setEntries(List<Tile> entries);  // preserves index iff keys match
+    void setTiles(List<Tile> tiles);      // preserves index iff keys match
     Tile selected();                      // null when empty
     void move(int delta);                 // clamped to bounds
     void recenter();                      // index 0
     int selectedIndex();
     int size();
+    boolean isEmpty();
 }
 ```
 
@@ -159,9 +160,14 @@ Holds a `WifiManager`. `label()` renders `"Wi-Fi: " + WifiState.fromCode(mgr.get
 
 - `OFF` → `setWifiEnabled(true)`
 - `ON` → `setWifiEnabled(false)`
-- `TURNING_ON` / `TURNING_OFF` → **no-op**, so an impatient double-tap cannot queue
-  an enable immediately followed by a disable
-- `UNKNOWN` → no-op
+- **anything else** → no-op
+
+The guard is written fail-closed — it proceeds only for `ON` and `OFF` — rather than
+testing for the transitional states. That covers `ENABLING`/`DISABLING`, so an impatient
+double-tap cannot queue an enable immediately followed by a disable, and it also covers
+`UNKNOWN` and `UNAVAILABLE`. The `UNAVAILABLE` case matters: that is the null
+`WifiManager` state, and a guard that let it through would dereference null on the very
+next line.
 
 ### 4.4 `TileListBuilder`
 
