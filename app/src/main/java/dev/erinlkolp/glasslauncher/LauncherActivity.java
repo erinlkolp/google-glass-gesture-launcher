@@ -10,6 +10,7 @@ import android.os.Bundle;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
+import android.widget.Toast;
 import dev.erinlkolp.glasslauncher.gesture.Gesture;
 import dev.erinlkolp.glasslauncher.gesture.GestureOrientation;
 import dev.erinlkolp.glasslauncher.gesture.GlassGestureDetector;
@@ -188,6 +189,13 @@ public class LauncherActivity extends Activity {
         if (tile == null) {
             return;
         }
-        tile.activate(this);
+        // Belt-and-braces: Tile.activate() is contractually required not to throw, but
+        // this activity is HOME, so a future implementor's mistake must not be allowed
+        // to take the home screen down.
+        try {
+            tile.activate(this);
+        } catch (Exception e) {
+            Toast.makeText(this, "Could not activate tile", Toast.LENGTH_SHORT).show();
+        }
     }
 }

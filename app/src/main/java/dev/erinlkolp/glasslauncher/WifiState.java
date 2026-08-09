@@ -33,11 +33,6 @@ public enum WifiState {
         return label;
     }
 
-    /** @return true while the radio is mid-transition, when a tap should be ignored. */
-    public boolean isTransitional() {
-        return this == ENABLING || this == DISABLING;
-    }
-
     public static WifiState fromCode(int code) {
         switch (code) {
             case WifiManager.WIFI_STATE_DISABLING:

@@ -142,11 +142,14 @@ exactly; `WifiTile` returns a short description and its raw state.
 
 ### 4.2 `WifiState`
 
-A pure enum — `OFF`, `TURNING_ON`, `ON`, `TURNING_OFF`, `UNKNOWN` — with a
+A pure enum — `DISABLING`, `OFF`, `ENABLING`, `ON`, `UNKNOWN`, `UNAVAILABLE` — with a
 `fromCode(int)` mapping over `WifiManager`'s integer constants and a display label
-for each. It takes a raw `int` rather than a `WifiManager`, which is what keeps it
-free of Android imports and unit-testable on the JVM. Out-of-range codes map to
-`UNKNOWN` rather than throwing.
+for each. The naming tracks `WifiManager`'s own vocabulary rather than inventing
+`TURNING_ON`/`TURNING_OFF` synonyms. `UNAVAILABLE` has no corresponding `WifiManager`
+code; it is constructed directly by `WifiTile` when `getSystemService(WIFI_SERVICE)`
+returns null (§8). It takes a raw `int` rather than a `WifiManager`, which is what
+keeps it free of Android imports and unit-testable on the JVM. Out-of-range codes map
+to `UNKNOWN` rather than throwing.
 
 ### 4.3 `WifiTile`
 

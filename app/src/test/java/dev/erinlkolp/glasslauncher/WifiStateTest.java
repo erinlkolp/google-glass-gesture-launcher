@@ -1,7 +1,6 @@
 package dev.erinlkolp.glasslauncher;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import android.net.wifi.WifiManager;
 import org.junit.Test;
@@ -22,16 +21,6 @@ public class WifiStateTest {
         assertEquals(WifiState.UNKNOWN, WifiState.fromCode(99));
         assertEquals(WifiState.UNKNOWN, WifiState.fromCode(-1));
         assertEquals(WifiState.UNKNOWN, WifiState.fromCode(Integer.MIN_VALUE));
-    }
-
-    @Test
-    public void onlyTheInBetweenStatesAreTransitional() {
-        assertTrue(WifiState.ENABLING.isTransitional());
-        assertTrue(WifiState.DISABLING.isTransitional());
-        assertFalse(WifiState.ON.isTransitional());
-        assertFalse(WifiState.OFF.isTransitional());
-        assertFalse(WifiState.UNKNOWN.isTransitional());
-        assertFalse(WifiState.UNAVAILABLE.isTransitional());
     }
 
     @Test

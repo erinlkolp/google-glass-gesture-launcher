@@ -49,8 +49,8 @@ Prerequisites:
 ./gradlew :app:installDebug
 ```
 
-`./gradlew test` runs all unit tests across the three modules (63 total: 21 in
-`gesture-core`, 26 in `app`, 16 in `daemon`). `:app:installDebug` builds and installs the
+`./gradlew test` runs all unit tests across the three modules (62 total: 21 in
+`gesture-core`, 25 in `app`, 16 in `daemon`). `:app:installDebug` builds and installs the
 launcher APK onto a connected device via the Android Gradle Plugin (no `adb` on `PATH`
 required for this one — AGP drives the install itself).
 

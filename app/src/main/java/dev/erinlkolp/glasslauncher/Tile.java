@@ -27,6 +27,12 @@ public interface Tile {
      */
     String key();
 
-    /** What a TAP does. */
+    /**
+     * What a TAP does.
+     *
+     * <p>Implementors must handle their own failures and must not throw: this activity
+     * is the device's HOME activity, and an exception escaping here takes down the
+     * home screen with no easy recovery.
+     */
     void activate(Context context);
 }

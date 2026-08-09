@@ -77,7 +77,7 @@ public final class AppCardView extends View {
         float centerY = getHeight() / 2.0f;
 
         if (selection.isEmpty()) {
-            canvas.drawText("No launchable apps", centerX, centerY, labelPaint);
+            canvas.drawText("No tiles", centerX, centerY, labelPaint);
             return;
         }
 

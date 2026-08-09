@@ -18,7 +18,7 @@ import java.util.List;
  */
 public final class WifiTile implements Tile {
 
-    public static final String KEY = "action:wifi";
+    private static final String KEY = "action:wifi";
 
     private final WifiManager wifiManager;
 
